@@ -61,6 +61,13 @@ namespace Rhetos.JsonCommands.Host.Controllers
         [HttpPost("read")]
         public IActionResult Read(List<Dictionary<string, JObject>> commands)
         {
+            bool readRecordsDefaultValue = true;
+            bool readTotalCountDefaultValue = false;
+            FilterCriteria[] filtersDefaultValue = null;
+            OrderByProperty[] sortDefaultValue = null;
+            int skipDefaultValue = 0;
+            int topDefaultValue = 0;
+
             List<ReadCommandResult> results = new List<ReadCommandResult>();
             foreach (var commandDict in commands)
             {
@@ -69,9 +76,8 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 Type entityType = _dom.GetType(entityName);
                 JObject properties = command.Value;
 
-                bool readRecords = properties.GetValue("ReadRecords").Value<bool>();
-                bool readTotalCount = properties.GetValue("ReadTotalCount").Value<bool>();
-
+                bool hasReadRecords = properties.TryGetValue("ReadRecords", out var readRecords);
+                bool hasReadTotalCount = properties.TryGetValue("ReadTotalCount", out var readTotalCount);
                 bool hasFilter = properties.TryGetValue("Filters", out var filters);
                 bool hasSort = properties.TryGetValue("Sort", out var sort);
                 bool hasSkip = properties.TryGetValue("Skip", out var skip);
@@ -83,7 +89,7 @@ namespace Rhetos.JsonCommands.Host.Controllers
                     Filters = hasFilter
                         ? new QueryParameters(_genericFilterHelper)
                             .ParseFilterParameters(filters.ToString(), entityName)
-                        : Array.Empty<FilterCriteria>(),
+                        : filtersDefaultValue,
                     OrderByProperties = hasSort
                         ? sort
                             .Values<string>()
@@ -92,11 +98,11 @@ namespace Rhetos.JsonCommands.Host.Controllers
                                 Descending = e.StartsWith('-')
                             })
                             .ToArray()
-                        : Array.Empty<OrderByProperty>(),
-                    ReadRecords = readRecords,
-                    ReadTotalCount = readTotalCount,
-                    Skip = hasSkip ? skip.Value<int>() : 0,
-                    Top = hasTop ? top.Value<int>() : 0,
+                        : sortDefaultValue,
+                    ReadRecords = hasReadRecords ? readRecords.Value<bool>() : readRecordsDefaultValue,
+                    ReadTotalCount = hasReadTotalCount ? readTotalCount.Value<bool>() : readTotalCountDefaultValue,
+                    Skip = hasSkip ? skip.Value<int>() : skipDefaultValue,
+                    Top = hasTop ? top.Value<int>() : topDefaultValue,
                 };
                 results.Add(_processingEngine.Execute(readEntityCommand));
             }
