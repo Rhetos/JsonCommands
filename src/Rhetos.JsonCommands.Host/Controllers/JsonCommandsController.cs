@@ -5,6 +5,7 @@ using Rhetos;
 using Rhetos.Dom;
 using Rhetos.Dom.DefaultConcepts;
 using Rhetos.JsonCommands.Host.Filters;
+using Rhetos.JsonCommands.Host.Parsers;
 using Rhetos.JsonCommands.Host.Utilities;
 using Rhetos.Processing;
 using Rhetos.Processing.DefaultCommands;
@@ -37,25 +38,23 @@ namespace Rhetos.JsonCommands.Host.Controllers
         }
 
         [HttpPost("write")]
-        public IActionResult Write(List<Dictionary<string, JObject>> commands)
+        public IActionResult Write([FromBody] object body)
         {
-            foreach (var commandDict in commands)
-            {
-                var command = commandDict.Single(); // Each command is deserialized as a dictionary to simplify the code, but only one key-value pair is allowed.
-                string entityName = command.Key;
-                Type entityType = _dom.GetType(entityName);
-                Type itemsType = typeof(WriteCommandItems<>).MakeGenericType(entityType);
-                dynamic items = command.Value.ToObject(itemsType);
+            var commands = new WriteCommandsParser(body.ToString(), _dom).Parse();
+            var saveEntityCommands = new List<ICommandInfo>();
 
+            foreach (var command in commands)
+            {
                 var saveEntityCommand = new SaveEntityCommandInfo
                 {
-                    Entity = entityName,
-                    DataToDelete = items.Delete,
-                    DataToUpdate = items.Update,
-                    DataToInsert = items.Insert
+                    Entity = command.Entity,
+                    DataToDelete = command.Operations.Where(op => op.Operation.Equals("Delete", StringComparison.OrdinalIgnoreCase)).SingleOrDefault().Items,
+                    DataToUpdate = command.Operations.Where(op => op.Operation.Equals("Update", StringComparison.OrdinalIgnoreCase)).SingleOrDefault().Items,
+                    DataToInsert = command.Operations.Where(op => op.Operation.Equals("Insert", StringComparison.OrdinalIgnoreCase)).SingleOrDefault().Items
                 };
-                _processingEngine.Execute(saveEntityCommand);
+                saveEntityCommands.Add(saveEntityCommand);
             }
+            _processingEngine.Execute(saveEntityCommands);
             return Ok();
         }
 
@@ -100,13 +99,6 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 readCommands.Add(readCommand);
             }
             return Ok(_processingEngine.Execute(readCommands));
-        }
-
-        private class WriteCommandItems<T> where T : IEntity
-        {
-            public T[] Delete { get; set; }
-            public T[] Update { get; set; }
-            public T[] Insert { get; set; }
         }
 
         public class ReadCommand
