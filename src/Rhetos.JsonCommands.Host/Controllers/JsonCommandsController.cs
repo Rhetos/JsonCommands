@@ -59,44 +59,28 @@ namespace Rhetos.JsonCommands.Host.Controllers
         }
 
         [HttpPost("read")]
-        public IActionResult Read(List<Dictionary<string, JObject>> commands)
+        public IActionResult Read(List<Dictionary<string, ReadCommand>> commands)
         {
             List<ReadCommandResult> results = new List<ReadCommandResult>();
             foreach (var commandDict in commands)
             {
                 var command = commandDict.Single(); // Each command is deserialized as a dictionary to simplify the code, but only one key-value pair is allowed.
                 string entityName = command.Key;
-                Type entityType = _dom.GetType(entityName);
-                JObject properties = command.Value;
-
-                bool readRecords = properties.GetValue("ReadRecords").Value<bool>();
-                bool readTotalCount = properties.GetValue("ReadTotalCount").Value<bool>();
-
-                bool hasFilter = properties.TryGetValue("Filters", out var filters);
-                bool hasSort = properties.TryGetValue("Sort", out var sort);
-                bool hasSkip = properties.TryGetValue("Skip", out var skip);
-                bool hasTop = properties.TryGetValue("Top", out var top);
+                ReadCommand properties = command.Value;
+                new QueryParameters(_genericFilterHelper).FinishPartiallyDeserializedFilters(entityName, properties.Filters);
 
                 var readEntityCommand = new ReadCommandInfo
                 {
                     DataSource = entityName,
-                    Filters = hasFilter
-                        ? new QueryParameters(_genericFilterHelper)
-                            .ParseFilterParameters(filters.ToString(), entityName)
-                        : Array.Empty<FilterCriteria>(),
-                    OrderByProperties = hasSort
-                        ? sort
-                            .Values<string>()
-                            .Select((e) => new OrderByProperty() { 
-                                Property = e.StartsWith('-') ? e.Substring(1) : e,
-                                Descending = e.StartsWith('-')
-                            })
-                            .ToArray()
-                        : Array.Empty<OrderByProperty>(),
-                    ReadRecords = readRecords,
-                    ReadTotalCount = readTotalCount,
-                    Skip = hasSkip ? skip.Value<int>() : 0,
-                    Top = hasTop ? top.Value<int>() : 0,
+                    Filters = properties.Filters,
+                    OrderByProperties = properties.Sort?.Select((e) => new OrderByProperty() {
+                        Property = e.StartsWith('-') ? e.Substring(1) : e,
+                        Descending = e.StartsWith('-')
+                    }).ToArray(),
+                    ReadRecords = properties.ReadRecords,
+                    ReadTotalCount = properties.ReadTotalCount,
+                    Skip = properties.Skip,
+                    Top = properties.Top,
                 };
                 results.Add(_processingEngine.Execute(readEntityCommand));
             }
@@ -108,6 +92,16 @@ namespace Rhetos.JsonCommands.Host.Controllers
             public T[] Delete { get; set; }
             public T[] Update { get; set; }
             public T[] Insert { get; set; }
+        }
+
+        public class ReadCommand
+        {
+            public FilterCriteria[] Filters { get; set; } = null;
+            public string[] Sort { get; set; } = null;
+            public bool ReadRecords { get; set; } = true;
+            public bool ReadTotalCount { get; set; } = false;
+            public int Skip { get; set; } = 0;
+            public int Top { get; set; } = 0;
         }
     }
 }

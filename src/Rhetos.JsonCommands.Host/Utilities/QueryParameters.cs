@@ -38,6 +38,14 @@ namespace Rhetos.JsonCommands.Host.Utilities
 
             if (!string.IsNullOrEmpty(filters))
                 parsedFilters.AddRange(JsonHelper.DeserializeOrException<FilterCriteria[]>(filters));
+            FinishPartiallyDeserializedFilters(dataStructureFullName, parsedFilters);
+
+            return parsedFilters.ToArray();
+        }
+
+        public void FinishPartiallyDeserializedFilters(string dataStructureFullName, IReadOnlyCollection<FilterCriteria> parsedFilters)
+        {
+            if (parsedFilters == null) return;
 
             foreach (var filterCriteria in parsedFilters)
             {
@@ -55,8 +63,6 @@ namespace Rhetos.JsonCommands.Host.Utilities
                 // otherwise it will be resolved previously with FinishPartiallyDeserializedObject.
                 filterCriteria.Value = JsonHelper.FinishPartiallyDeserializedArray(filterCriteria.Value);
             }
-
-            return parsedFilters.ToArray();
         }
     }
 }
