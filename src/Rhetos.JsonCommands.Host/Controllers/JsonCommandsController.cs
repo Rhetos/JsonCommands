@@ -4,7 +4,7 @@ using Rhetos;
 using Rhetos.Dom;
 using Rhetos.Dom.DefaultConcepts;
 using Rhetos.JsonCommands.Host.Filters;
-using Rhetos.JsonCommands.Host.Parsers;
+using Rhetos.JsonCommands.Host.Parsers.Write;
 using Rhetos.JsonCommands.Host.Utilities;
 using Rhetos.Processing;
 using Rhetos.Processing.DefaultCommands;
@@ -47,9 +47,9 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 var saveEntityCommand = new SaveEntityCommandInfo
                 {
                     Entity = command.Entity,
-                    DataToDelete = command.Operations.Where(op => op.Operation.Equals("Delete", StringComparison.OrdinalIgnoreCase)).SingleOrDefault().Items,
-                    DataToUpdate = command.Operations.Where(op => op.Operation.Equals("Update", StringComparison.OrdinalIgnoreCase)).SingleOrDefault().Items,
-                    DataToInsert = command.Operations.Where(op => op.Operation.Equals("Insert", StringComparison.OrdinalIgnoreCase)).SingleOrDefault().Items
+                    DataToDelete = command.Operations.Where(op => op.Operation.Equals("Delete", StringComparison.OrdinalIgnoreCase)).SingleOrDefault()?.Items,
+                    DataToUpdate = command.Operations.Where(op => op.Operation.Equals("Update", StringComparison.OrdinalIgnoreCase)).SingleOrDefault()?.Items,
+                    DataToInsert = command.Operations.Where(op => op.Operation.Equals("Insert", StringComparison.OrdinalIgnoreCase)).SingleOrDefault()?.Items
                 };
                 saveEntityCommands.Add(saveEntityCommand);
             }

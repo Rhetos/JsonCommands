@@ -7,7 +7,7 @@ using System;
 using System.Collections;
 using System.Linq;
 
-namespace Rhetos.JsonCommands.Host.Parsers
+namespace Rhetos.JsonCommands.Host.Parsers.Write
 {
     public class WriteCommandsParser : IDisposable
     {
@@ -38,7 +38,7 @@ namespace Rhetos.JsonCommands.Host.Parsers
             }
         }
 
-        public List<(string Entity, List<(string Operation, IEntity[] Items)> Operations)> Parse()
+        public List<Command> Parse()
         {
             if (!reader.Read())
                 throw CreateException("Empty JSON.");
@@ -48,11 +48,11 @@ namespace Rhetos.JsonCommands.Host.Parsers
             return commands;
         }
 
-        List<(string Entity, List<(string Operation, IEntity[] Items)> Operations)> ReadArrayOfCommands()
+        List<Command> ReadArrayOfCommands()
         {
             ReadToken(JsonToken.StartArray);
 
-            List<(string Entity, List<(string Operation, IEntity[] Items)> Operations)> commands = new();
+            List<Command> commands = new();
 
             while (reader.TokenType != JsonToken.EndArray)
             {
@@ -64,7 +64,7 @@ namespace Rhetos.JsonCommands.Host.Parsers
             return commands;
         }
 
-        (string Entity, List<(string Operation, IEntity[] Items)> Operations) ReadCommand()
+        Command ReadCommand()
         {
             ReadToken(JsonToken.StartObject);
 
@@ -79,7 +79,11 @@ namespace Rhetos.JsonCommands.Host.Parsers
                 throw CreateException("Svaka komanda u listi treba sadržavati samo po jedan entitet.");
 
             ReadToken(JsonToken.EndObject);
-            return (entity, operations);
+            return new Command
+            {
+                Entity = entity,
+                Operations = operations
+            };
         }
 
         object ReadToken(JsonToken jsonToken)
@@ -98,17 +102,19 @@ namespace Rhetos.JsonCommands.Host.Parsers
             return (string)propertyName;
         }
 
-        List<(string Operation, IEntity[] Items)> ReadCommandItems(Type entityType)
+        List<CommandItem> ReadCommandItems(Type entityType)
         {
             ReadToken(JsonToken.StartObject);
 
-            List<(string Operation, IEntity[] items)> operations = new();
+            List<CommandItem> operations = new();
 
             while (reader.TokenType != JsonToken.EndObject)
             {
-                string operation = ReadPropertyName();
-                var items = ReadItemsArray(entityType);
-                operations.Add((operation, items));
+                operations.Add(new CommandItem
+                {
+                    Operation = ReadPropertyName(),
+                    Items = ReadItemsArray(entityType)
+                });
             }
 
             ReadToken(JsonToken.EndObject);
