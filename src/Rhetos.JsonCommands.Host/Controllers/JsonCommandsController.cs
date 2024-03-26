@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Rhetos;
 using Rhetos.Dom;
@@ -59,9 +60,22 @@ namespace Rhetos.JsonCommands.Host.Controllers
         }
 
         [HttpPost("read")]
-        public IActionResult Read(List<Dictionary<string, ReadCommand>> commands)
+        public IActionResult ReadPost(List<Dictionary<string, ReadCommand>> commands)
         {
-            List<ReadCommandResult> results = new List<ReadCommandResult>();
+            return Read(commands);
+        }
+
+        [HttpGet("read")]
+        public IActionResult ReadGet(string query)
+        {
+            var commands = JsonConvert.DeserializeObject<List<Dictionary<string, ReadCommand>>>(query);
+            return Read(commands);
+        }
+
+        private IActionResult Read(List<Dictionary<string, ReadCommand>> commands)
+        {
+            var readCommands = new List<ICommandInfo>();
+
             foreach (var commandDict in commands)
             {
                 var command = commandDict.Single(); // Each command is deserialized as a dictionary to simplify the code, but only one key-value pair is allowed.
@@ -69,11 +83,12 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 ReadCommand properties = command.Value;
                 new QueryParameters(_genericFilterHelper).FinishPartiallyDeserializedFilters(entityName, properties.Filters);
 
-                var readEntityCommand = new ReadCommandInfo
+                var readCommand = new ReadCommandInfo
                 {
                     DataSource = entityName,
                     Filters = properties.Filters,
-                    OrderByProperties = properties.Sort?.Select((e) => new OrderByProperty() {
+                    OrderByProperties = properties.Sort?.Select((e) => new OrderByProperty()
+                    {
                         Property = e.StartsWith('-') ? e.Substring(1) : e,
                         Descending = e.StartsWith('-')
                     }).ToArray(),
@@ -82,9 +97,9 @@ namespace Rhetos.JsonCommands.Host.Controllers
                     Skip = properties.Skip,
                     Top = properties.Top,
                 };
-                results.Add(_processingEngine.Execute(readEntityCommand));
+                readCommands.Add(readCommand);
             }
-            return Ok(results);
+            return Ok(_processingEngine.Execute(readCommands));
         }
 
         private class WriteCommandItems<T> where T : IEntity
