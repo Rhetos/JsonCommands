@@ -19,8 +19,11 @@
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Rhetos.JsonCommands.Host.Parsers;
 using Rhetos.Utilities;
 using System;
+using System.Collections.Generic;
+using System.Text.Json;
 
 namespace Rhetos.JsonCommands.Host.Utilities
 {
@@ -31,10 +34,40 @@ namespace Rhetos.JsonCommands.Host.Utilities
     {
         private readonly ILocalizer localizer;
 
-        public class ErrorResponse
+        public interface IErrorResponse { }
+
+        public class ErrorResponse : IErrorResponse
+        {
+            public string Message { get; set; }
+            public Dictionary<string, string> Metadata { get; set; }
+
+            public ErrorResponse(string message, string metadata)
+            {
+                Message = message;
+                Metadata = ErrorResponseMetadataParser.Parse(metadata);
+            }
+
+            public ErrorResponse(string message, Dictionary<string, string> metadata)
+            {
+                Message = message;
+                Metadata = metadata;
+            }
+
+            public override string ToString()
+            {
+                return $"\"Error\": {{ \"Message\": \"{Message}\", \"Metadata\": {{ {JsonSerializer.Serialize(Metadata)} }} }}";
+            }
+        }
+
+        public class LegacyErrorResponse : IErrorResponse
         {
             public string UserMessage { get;set; }
             public string SystemMessage { get; set; }
+            public LegacyErrorResponse(string message, string systemMessage)
+            {
+                UserMessage = message;
+                SystemMessage = systemMessage;
+            }
             public override string ToString()
             {
                 return "SystemMessage: " + (SystemMessage ?? "<null>") + ", UserMessage: " + (UserMessage ?? "<null>");
@@ -46,51 +79,57 @@ namespace Rhetos.JsonCommands.Host.Utilities
             this.localizer = rhetosLocalizer.Value;
         }
 
-        public ErrorDescription CreateResponseFromException(Exception error)
+        public ErrorDescription CreateResponseFromException(Exception error, bool useLegacyErrorResponse)
         {
+            int statusCode;
+            IErrorResponse errorResponse;
+            LogLevel logLevel;
             string commandSummary = ExceptionsUtility.GetCommandSummary(error);
 
             if (error is UserException userException)
             {
-                return new ErrorDescription(
-                    StatusCodes.Status400BadRequest,
-                    new ErrorResponse
-                    {
-                        UserMessage = localizer[userException.UserMessage, userException.MessageParameters],
-                        SystemMessage = userException.SystemMessage
-                    },
-                    LogLevel.Trace,
-                    commandSummary);
+                statusCode = StatusCodes.Status400BadRequest;
+                logLevel = LogLevel.Trace;
+
+                errorResponse = useLegacyErrorResponse ? new LegacyErrorResponse
+                (
+                    localizer[userException.UserMessage, userException.MessageParameters],
+                    userException.SystemMessage
+                ) : new ErrorResponse(
+                    localizer[userException.UserMessage, userException.MessageParameters],
+                    userException.SystemMessage
+                );
             }
             else if (error is ClientException clientException)
             {
-                int statusCode = GetStatusCode(clientException);
-                return new ErrorDescription(
-                    statusCode,
-                    new ErrorResponse
-                    {
-                        UserMessage = statusCode == (int)System.Net.HttpStatusCode.BadRequest
-                            // The ClientExceptionUserMessage is intended for invalid request format with status code BadRequest (default).
-                            // Other error types are not correctly described with that message so clientException.Message is returned instead.
-                            ? localizer[ErrorMessages.ClientExceptionUserMessage]
-                            // Differences between versions when statusCode <> BadRequest:
-                            // - v4 and v5.1 returns clientException.Message
-                            // - v5.0 returns ClientExceptionUserMessage
-                            // - v5.1 returns localized clientException.Message
-                            : localizer[clientException.Message],
-                        SystemMessage = clientException.Message
-                    },
-                    LogLevel.Information,
-                    commandSummary);
+                statusCode = GetStatusCode(clientException);
+                logLevel = LogLevel.Information;
+
+                string metadata = statusCode == (int)System.Net.HttpStatusCode.BadRequest
+                    // The ClientExceptionUserMessage is intended for invalid request format with status code BadRequest (default).
+                    // Other error types are not correctly described with that message so clientException.Message is returned instead.
+                    ? localizer[ErrorMessages.ClientExceptionUserMessage]
+                    // Differences between versions when statusCode <> BadRequest:
+                    // - v4 and v5.1 returns clientException.Message
+                    // - v5.0 returns ClientExceptionUserMessage
+                    // - v5.1 returns localized clientException.Message
+                    : localizer[clientException.Message];
+
+                errorResponse = useLegacyErrorResponse
+                    ? new LegacyErrorResponse(clientException.Message, metadata)
+                    : new ErrorResponse(clientException.Message, metadata);
             }
             else
             {
-                return new ErrorDescription(
-                    StatusCodes.Status500InternalServerError,
-                    new ErrorResponse { SystemMessage = ErrorMessages.GetInternalServerErrorMessage(localizer, error) },
-                    LogLevel.Error,
-                    commandSummary);
+                statusCode = StatusCodes.Status500InternalServerError;
+                logLevel = LogLevel.Error;
+
+                errorResponse = useLegacyErrorResponse 
+                    ? new LegacyErrorResponse("", ErrorMessages.GetInternalServerErrorMessage(localizer, error))
+                    : new ErrorResponse("", ErrorMessages.GetInternalServerErrorMessage(localizer, error));
             }
+
+            return new ErrorDescription(statusCode, errorResponse, logLevel, commandSummary);
         }
 
         private int GetStatusCode(ClientException clientException)

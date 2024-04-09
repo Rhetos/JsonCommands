@@ -36,5 +36,7 @@ namespace Rhetos.JsonCommands.Host
         /// ApiExplorer group name for JsonCommands API.
         /// </summary>
         public string ApiExplorerGroupName { get; set; } = "JsonCommands";
+
+        public bool UseLegacyErrorResponse { get; set; } = false;
     }
 }

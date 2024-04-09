@@ -35,14 +35,13 @@ namespace Rhetos // The namespace should match the extension type RhetosServiceC
         public static RhetosServiceCollectionBuilder AddJsonCommands(this RhetosServiceCollectionBuilder builder,
             Action<JsonCommandsOptions> configureOptions = null)
         {
-            builder.AddJsonCommandsFilters();
+            configureOptions ??= (_) => new JsonCommandsOptions();
 
             builder.Services.AddOptions();
 
-            if (configureOptions != null)
-            {
-                builder.Services.Configure<JsonCommandsOptions>(configureOptions);
-            }
+            builder.Services.Configure<JsonCommandsOptions>(configureOptions);
+
+            builder.AddJsonCommandsFilters();
 
             return builder;
         }

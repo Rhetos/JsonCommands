@@ -22,9 +22,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Rhetos.JsonCommands.Host.Utilities;
 using System;
 using System.Linq;
+using static Rhetos.JsonCommands.Host.Utilities.ErrorReporting;
 
 namespace Rhetos.JsonCommands.Host.Filters
 {
@@ -43,13 +45,15 @@ namespace Rhetos.JsonCommands.Host.Filters
     /// </remarks>
     public class ApiExceptionFilter : IActionFilter, IOrderedFilter
     {
+        private readonly IOptions<JsonCommandsOptions> options;
         private readonly ErrorReporting jsonErrorHandler;
         private readonly ILogger logger;
 
         public int Order { get; } = int.MaxValue - 10;
 
-        public ApiExceptionFilter(ErrorReporting jsonErrorHandler, ILogger<ApiExceptionFilter> logger)
+        public ApiExceptionFilter(IOptions<JsonCommandsOptions> options, ErrorReporting jsonErrorHandler, ILogger<ApiExceptionFilter> logger)
         {
+            this.options = options;
             this.jsonErrorHandler = jsonErrorHandler;
             this.logger = logger;
         }
@@ -70,18 +74,24 @@ namespace Rhetos.JsonCommands.Host.Filters
 
             if (string.IsNullOrEmpty(invalidModelEntry.Key))
             {
-                var responseMessage = new ErrorReporting.ErrorResponse
-                {
-                    SystemMessage = "Serialization error: Please check if the request body has a valid JSON format.\n" + errors
-                };
+                IErrorResponse responseMessage = options.Value.UseLegacyErrorResponse ? new LegacyErrorResponse(
+                    "",
+                    "Serialization error: Please check if the request body has a valid JSON format.\n" + errors
+                ) : new ErrorResponse(
+                    "",
+                    "Serialization error: Please check if the request body has a valid JSON format.\n" + errors
+                );
                 context.Result = new JsonResult(responseMessage) { StatusCode = StatusCodes.Status400BadRequest };
             }
             else
             {
-                var responseMessage = new ErrorReporting.ErrorResponse
-                {
-                    SystemMessage = $"Parameter error: Supplied value for parameter '{invalidModelEntry.Key}' couldn't be parsed.\n" + errors
-                };
+                IErrorResponse responseMessage = options.Value.UseLegacyErrorResponse ? new LegacyErrorResponse(
+                    "",
+                    $"Parameter error: Supplied value for parameter '{invalidModelEntry.Key}' couldn't be parsed.\n" + errors
+                ) : new ErrorResponse(
+                    "",
+                    $"Parameter error: Supplied value for parameter '{invalidModelEntry.Key}' couldn't be parsed.\n" + errors
+                );
                 context.Result = new JsonResult(responseMessage) { StatusCode = StatusCodes.Status400BadRequest };
             }
         }
@@ -90,7 +100,7 @@ namespace Rhetos.JsonCommands.Host.Filters
         {
             if (context.Exception != null)
             {
-                var error = jsonErrorHandler.CreateResponseFromException(context.Exception);
+                var error = jsonErrorHandler.CreateResponseFromException(context.Exception, options.Value.UseLegacyErrorResponse);
 
                 context.Result = new JsonResult(error.Response) { StatusCode = error.StatusCode };
                 context.ExceptionHandled = true;
