@@ -23,7 +23,6 @@ using Rhetos.JsonCommands.Host.Parsers;
 using Rhetos.Utilities;
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 
 namespace Rhetos.JsonCommands.Host.Utilities
 {
@@ -52,11 +51,6 @@ namespace Rhetos.JsonCommands.Host.Utilities
                 Message = message;
                 Metadata = metadata;
             }
-
-            public override string ToString()
-            {
-                return $"\"Error\": {{ \"Message\": \"{Message}\", \"Metadata\": {{ {JsonSerializer.Serialize(Metadata)} }} }}";
-            }
         }
 
         public class LegacyErrorResponse : IErrorResponse
@@ -68,10 +62,6 @@ namespace Rhetos.JsonCommands.Host.Utilities
                 UserMessage = message;
                 SystemMessage = systemMessage;
             }
-            public override string ToString()
-            {
-                return "SystemMessage: " + (SystemMessage ?? "<null>") + ", UserMessage: " + (UserMessage ?? "<null>");
-            }
         }
 
         public ErrorReporting(IRhetosComponent<ILocalizer> rhetosLocalizer)
@@ -82,7 +72,8 @@ namespace Rhetos.JsonCommands.Host.Utilities
         public ErrorDescription CreateResponseFromException(Exception error, bool useLegacyErrorResponse)
         {
             int statusCode;
-            IErrorResponse errorResponse;
+            string userMessage;
+            string systemMessage;
             LogLevel logLevel;
             string commandSummary = ExceptionsUtility.GetCommandSummary(error);
 
@@ -91,21 +82,15 @@ namespace Rhetos.JsonCommands.Host.Utilities
                 statusCode = StatusCodes.Status400BadRequest;
                 logLevel = LogLevel.Trace;
 
-                errorResponse = useLegacyErrorResponse ? new LegacyErrorResponse
-                (
-                    localizer[userException.UserMessage, userException.MessageParameters],
-                    userException.SystemMessage
-                ) : new ErrorResponse(
-                    localizer[userException.UserMessage, userException.MessageParameters],
-                    userException.SystemMessage
-                );
+                userMessage = localizer[userException.UserMessage, userException.MessageParameters];
+                systemMessage = userException.SystemMessage;
             }
             else if (error is ClientException clientException)
             {
                 statusCode = GetStatusCode(clientException);
                 logLevel = LogLevel.Information;
 
-                string metadata = statusCode == (int)System.Net.HttpStatusCode.BadRequest
+                userMessage = statusCode == (int)System.Net.HttpStatusCode.BadRequest
                     // The ClientExceptionUserMessage is intended for invalid request format with status code BadRequest (default).
                     // Other error types are not correctly described with that message so clientException.Message is returned instead.
                     ? localizer[ErrorMessages.ClientExceptionUserMessage]
@@ -114,20 +99,21 @@ namespace Rhetos.JsonCommands.Host.Utilities
                     // - v5.0 returns ClientExceptionUserMessage
                     // - v5.1 returns localized clientException.Message
                     : localizer[clientException.Message];
-
-                errorResponse = useLegacyErrorResponse
-                    ? new LegacyErrorResponse(clientException.Message, metadata)
-                    : new ErrorResponse(clientException.Message, metadata);
+                systemMessage = clientException.Message;
             }
             else
             {
                 statusCode = StatusCodes.Status500InternalServerError;
                 logLevel = LogLevel.Error;
 
-                errorResponse = useLegacyErrorResponse 
-                    ? new LegacyErrorResponse("", ErrorMessages.GetInternalServerErrorMessage(localizer, error))
-                    : new ErrorResponse("", ErrorMessages.GetInternalServerErrorMessage(localizer, error));
+                userMessage = null;
+                systemMessage = ErrorMessages.GetInternalServerErrorMessage(localizer, error);
             }
+
+
+            IErrorResponse errorResponse = useLegacyErrorResponse 
+                ? new LegacyErrorResponse(userMessage, systemMessage)
+                : new ErrorResponse(userMessage, systemMessage);
 
             return new ErrorDescription(statusCode, errorResponse, logLevel, commandSummary);
         }

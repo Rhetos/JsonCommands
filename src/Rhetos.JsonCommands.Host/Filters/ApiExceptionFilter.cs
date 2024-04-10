@@ -70,30 +70,23 @@ namespace Rhetos.JsonCommands.Host.Filters
             var invalidModelEntry = invalidModelEntries.First();
             var errors = string.Join("\n", invalidModelEntry.Value.Errors.Select(a => a.ErrorMessage));
 
-            // If no key is present, it means there is an error deserializing body.
+            string systemMessage;
 
+            // If no key is present, it means there is an error deserializing body.
             if (string.IsNullOrEmpty(invalidModelEntry.Key))
             {
-                IErrorResponse responseMessage = options.Value.UseLegacyErrorResponse ? new LegacyErrorResponse(
-                    "",
-                    "Serialization error: Please check if the request body has a valid JSON format.\n" + errors
-                ) : new ErrorResponse(
-                    "",
-                    "Serialization error: Please check if the request body has a valid JSON format.\n" + errors
-                );
-                context.Result = new JsonResult(responseMessage) { StatusCode = StatusCodes.Status400BadRequest };
+                systemMessage = "Serialization error: Please check if the request body has a valid JSON format.\n" + errors;
             }
             else
             {
-                IErrorResponse responseMessage = options.Value.UseLegacyErrorResponse ? new LegacyErrorResponse(
-                    "",
-                    $"Parameter error: Supplied value for parameter '{invalidModelEntry.Key}' couldn't be parsed.\n" + errors
-                ) : new ErrorResponse(
-                    "",
-                    $"Parameter error: Supplied value for parameter '{invalidModelEntry.Key}' couldn't be parsed.\n" + errors
-                );
-                context.Result = new JsonResult(responseMessage) { StatusCode = StatusCodes.Status400BadRequest };
+                systemMessage = $"Parameter error: Supplied value for parameter '{invalidModelEntry.Key}' couldn't be parsed.\n" + errors;
             }
+
+            IErrorResponse responseMessage = options.Value.UseLegacyErrorResponse
+                ? new LegacyErrorResponse(null, systemMessage)
+                : new ErrorResponse(null, systemMessage);
+            
+            context.Result = new JsonResult(responseMessage) { StatusCode = StatusCodes.Status400BadRequest };
         }
 
         public void OnActionExecuted(ActionExecutedContext context)
