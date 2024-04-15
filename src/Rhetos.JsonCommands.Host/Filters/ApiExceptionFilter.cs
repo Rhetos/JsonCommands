@@ -22,9 +22,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Rhetos.JsonCommands.Host.Utilities;
 using System;
 using System.Linq;
+using static Rhetos.JsonCommands.Host.Utilities.ErrorReporting;
 
 namespace Rhetos.JsonCommands.Host.Filters
 {
@@ -43,13 +45,15 @@ namespace Rhetos.JsonCommands.Host.Filters
     /// </remarks>
     public class ApiExceptionFilter : IActionFilter, IOrderedFilter
     {
+        private readonly IOptions<JsonCommandsOptions> options;
         private readonly ErrorReporting jsonErrorHandler;
         private readonly ILogger logger;
 
         public int Order { get; } = int.MaxValue - 10;
 
-        public ApiExceptionFilter(ErrorReporting jsonErrorHandler, ILogger<ApiExceptionFilter> logger)
+        public ApiExceptionFilter(IOptions<JsonCommandsOptions> options, ErrorReporting jsonErrorHandler, ILogger<ApiExceptionFilter> logger)
         {
+            this.options = options;
             this.jsonErrorHandler = jsonErrorHandler;
             this.logger = logger;
         }
@@ -66,31 +70,30 @@ namespace Rhetos.JsonCommands.Host.Filters
             var invalidModelEntry = invalidModelEntries.First();
             var errors = string.Join("\n", invalidModelEntry.Value.Errors.Select(a => a.ErrorMessage));
 
-            // If no key is present, it means there is an error deserializing body.
+            string systemMessage;
 
+            // If no key is present, it means there is an error deserializing body.
             if (string.IsNullOrEmpty(invalidModelEntry.Key))
             {
-                var responseMessage = new ErrorReporting.ErrorResponse
-                {
-                    SystemMessage = "Serialization error: Please check if the request body has a valid JSON format.\n" + errors
-                };
-                context.Result = new JsonResult(responseMessage) { StatusCode = StatusCodes.Status400BadRequest };
+                systemMessage = "Serialization error: Please check if the request body has a valid JSON format.\n" + errors;
             }
             else
             {
-                var responseMessage = new ErrorReporting.ErrorResponse
-                {
-                    SystemMessage = $"Parameter error: Supplied value for parameter '{invalidModelEntry.Key}' couldn't be parsed.\n" + errors
-                };
-                context.Result = new JsonResult(responseMessage) { StatusCode = StatusCodes.Status400BadRequest };
+                systemMessage = $"Parameter error: Supplied value for parameter '{invalidModelEntry.Key}' couldn't be parsed.\n" + errors;
             }
+
+            IErrorResponse responseMessage = options.Value.UseLegacyErrorResponse
+                ? new LegacyErrorResponse(null, systemMessage)
+                : new ErrorResponse(null, systemMessage);
+            
+            context.Result = new JsonResult(responseMessage) { StatusCode = StatusCodes.Status400BadRequest };
         }
 
         public void OnActionExecuted(ActionExecutedContext context)
         {
             if (context.Exception != null)
             {
-                var error = jsonErrorHandler.CreateResponseFromException(context.Exception);
+                var error = jsonErrorHandler.CreateResponseFromException(context.Exception, options.Value.UseLegacyErrorResponse);
 
                 context.Result = new JsonResult(error.Response) { StatusCode = error.StatusCode };
                 context.ExceptionHandled = true;

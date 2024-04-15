@@ -36,5 +36,18 @@ namespace Rhetos.JsonCommands.Host
         /// ApiExplorer group name for JsonCommands API.
         /// </summary>
         public string ApiExplorerGroupName { get; set; } = "JsonCommands";
+
+        /// <summary>
+        /// Flag for switching between new error response and legacy error response
+        /// {
+        ///   New error response format:
+        ///     "Error": { "Message": "...", "Metadata": { "DataStructure": "Bookstore.Book", "Property": "Title", "ErrorCode": ..., ... } }
+        ///
+        ///   Legacy error response:
+        ///     "UserMessage": "...",
+        ///     "SystemMessage": "..."
+        /// }
+        /// </summary>
+        public bool UseLegacyErrorResponse { get; set; } = false;
     }
 }
