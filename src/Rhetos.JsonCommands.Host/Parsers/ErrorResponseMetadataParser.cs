@@ -1,5 +1,4 @@
-﻿using Newtonsoft.Json;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 
 namespace Rhetos.JsonCommands.Host.Parsers
@@ -8,19 +7,13 @@ namespace Rhetos.JsonCommands.Host.Parsers
     {
         public static Dictionary<string, string> Parse(string message)
         {
-            try
-            {
-                return message.Split(",").Select(pair => pair.Split(':')).ToDictionary(
-                    keySelector: (element) => element[0],
-                    elementSelector: (element) => element[1]);
-            }
-            catch
-            {
-                return new Dictionary<string, string>
-                {
-                    { "SystemMessage", message }
-                };
-            }
+            string[] metadata = message.Split(",");
+            if(metadata.Any(element => !element.Contains(':'))) 
+                return new Dictionary<string, string> { { "SystemMessage", message } };
+
+            return metadata
+                .Select(element => element.Split(':', 2))
+                .ToDictionary(keySelector: (element) => element[0], elementSelector: (element) => element[1]);
         }
     }
 }
