@@ -48,9 +48,9 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 var saveEntityCommand = new SaveEntityCommandInfo
                 {
                     Entity = command.Entity,
-                    DataToDelete = command.DeleteOperations.SingleOrDefault()?.Items,
-                    DataToUpdate = command.UpdateOperations.SingleOrDefault()?.Items,
-                    DataToInsert = command.InsertOperations.SingleOrDefault()?.Items
+                    DataToDelete = command.DeleteOperationItems(),
+                    DataToUpdate = command.UpdateOperationItems(),
+                    DataToInsert = command.InsertOperationItems()
                 };
                 saveEntityCommands.Add(saveEntityCommand);
             }
