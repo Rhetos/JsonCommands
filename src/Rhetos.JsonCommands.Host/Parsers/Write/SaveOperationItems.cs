@@ -3,7 +3,7 @@ using System;
 
 namespace Rhetos.JsonCommands.Host.Parsers.Write
 {
-    public class CommandItem
+    public class SaveOperationItems
     {
         public string Operation 
         { 
@@ -15,7 +15,7 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
                     || value.Equals("Insert", StringComparison.OrdinalIgnoreCase))
                     _operation = value;
                 else
-                    throw new ClientException($"Operation {{{value}}} doesn't exist! The allowed operations are Delete, Update and Insert (in any casing).");
+                    throw new ClientException($"Operation {value} doesn't exist! The allowed operations are Delete, Update and Insert (in any casing).");
             }
         }
         public IEntity[] Items { get; set; }

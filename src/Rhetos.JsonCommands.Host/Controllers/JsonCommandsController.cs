@@ -16,9 +16,9 @@ using System.Linq;
 namespace Rhetos.JsonCommands.Host.Controllers
 {
     /// <summary>
-    /// Web API za snimanje više zapisa odjednom.
-    /// Omogućuje da se u jednom web requestu (i u jednoj db transakciji) odjednom inserta, deletea i updatea više zapisa od više različitih entiteta.
-    /// Primjer JSON formata za podatke koje treba poslati je opisan u ovom komentaru: https://github.com/Rhetos/Rhetos/issues/355#issuecomment-915180224
+    /// Web API used for saving multiple records at once.
+    /// ALlows inserting, deleting and updating multiple records from multiple entities in a single web request (within a single database transaction)
+    /// An example JSON format for the data to be sent is described in this comment: https://github.com/Rhetos/Rhetos/issues/355#issuecomment-915180224
     /// </summary>
     [Route("jc")]
     [ApiController]

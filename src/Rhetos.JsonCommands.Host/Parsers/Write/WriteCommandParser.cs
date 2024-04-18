@@ -102,15 +102,15 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
             return (string)propertyName;
         }
 
-        List<CommandItem> ReadCommandItems(Type entityType)
+        List<SaveOperationItems> ReadCommandItems(Type entityType)
         {
             ReadToken(JsonToken.StartObject);
 
-            List<CommandItem> operations = new();
+            List<SaveOperationItems> operations = new();
 
             while (reader.TokenType != JsonToken.EndObject)
             {
-                operations.Add(new CommandItem
+                operations.Add(new SaveOperationItems
                 {
                     Operation = ReadPropertyName(),
                     Items = ReadItemsArray(entityType)
