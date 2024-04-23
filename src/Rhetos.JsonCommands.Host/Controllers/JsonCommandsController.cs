@@ -11,7 +11,9 @@ using Rhetos.Processing;
 using Rhetos.Processing.DefaultCommands;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Rhetos.JsonCommands.Host.Controllers
 {
@@ -38,9 +40,15 @@ namespace Rhetos.JsonCommands.Host.Controllers
         }
 
         [HttpPost("write")]
-        public IActionResult Write([FromBody] object body)
+        public async Task<IActionResult> Write()
         {
-            var commands = new WriteCommandsParser(body.ToString(), _dom).Parse();
+            string body;
+            using (StreamReader reader = new StreamReader(Request.Body))
+            {
+                body = await reader.ReadToEndAsync();
+            };
+
+            var commands = new WriteCommandsParser(body, _dom).Parse();
             var saveEntityCommands = new List<ICommandInfo>();
 
             foreach (var command in commands)
