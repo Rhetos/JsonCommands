@@ -69,7 +69,7 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
             ReadToken(JsonToken.StartObject);
 
             if (reader.TokenType != JsonToken.PropertyName)
-                throw CreateException("Komanda je prazna.");
+                throw CreateException("There is an empty command.");
 
             string entity = ReadPropertyName();
             var entityType = dom.GetType(entity);
@@ -89,7 +89,7 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
         object ReadToken(JsonToken jsonToken)
         {
             if (reader.TokenType != jsonToken)
-                throw CreateException($"Expected tokent type {jsonToken}. Provided token is {reader.TokenType}.");
+                throw CreateException($"Expected token type {jsonToken}. Provided token is {reader.TokenType}.");
 
             object value = reader.Value;
             reader.Read();
