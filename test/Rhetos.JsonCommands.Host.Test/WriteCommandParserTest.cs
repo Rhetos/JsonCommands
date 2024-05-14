@@ -1,14 +1,27 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
-using Rhetos.Dom;
+﻿/*
+    Copyright (C) 2014 Omega software d.o.o.
+
+    This file is part of Rhetos.
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as
+    published by the Free Software Foundation, either version 3 of the
+    License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using Microsoft.Extensions.DependencyInjection;
 using Rhetos.JsonCommands.Host.Parsers.Write;
 using Rhetos.JsonCommands.Host.Test.Tools;
 using System;
 using System.Collections.Generic;
-using System.CommandLine.Parsing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using TestApp;
 using Xunit;
 
@@ -20,29 +33,19 @@ namespace Rhetos.JsonCommands.Host.Test
         [Theory]
         [InlineData("", "Empty JSON.")]
         [InlineData("[", "Expected token type StartObject.")]
-        [InlineData("[{]", "Invalid property identifier character: ].")]
+        [InlineData("[{]", "Invalid JSON format. At line 1, position 2. See the server log for more details on the error.", "Invalid property identifier character: ].")]
         [InlineData("[{}]", "There is an empty command.")]
-        public void ParserTestShouldFail(string json, string exceptionStartsWith)
+        public void ParserTestShouldFail(string json, string clientError, string serverLog = null)
         {
-            var factory = new CustomWebApplicationFactory<Startup>();
+            var logEntries = new LogEntries();
+            var factory = new CustomWebApplicationFactory<Startup>().WithWebHostBuilder(builder => builder.MonitorLogging(logEntries));
             using var scope = factory.Services.CreateScope();
-            var dom = scope.ServiceProvider.GetRequiredService<IRhetosComponent<IDomainObjectModel>>().Value;
+            var parser = scope.ServiceProvider.GetRequiredService<WriteCommandsParser>();
 
-            WriteCommandsParser parser = new WriteCommandsParser(json, dom);
-
-            try
-            {
-                parser.Parse();
-                Assert.True(false, "The parser.Parse() call should have thrown a JsonException.");
-            }
-            catch (JsonException ex)
-            {
-                Assert.StartsWith(exceptionStartsWith, ex.Message);
-            }
-            catch (Exception)
-            {
-                Assert.True(false, "The exception type is incorrect.");
-            }
+            var ex = Assert.Throws<ClientException>(() => parser.Parse(json));
+            Assert.StartsWith(clientError, ex.Message);
+            if (serverLog != null)
+                Assert.Contains(logEntries, e => e.Message.StartsWith(serverLog));
         }
 
         [Fact]
@@ -50,7 +53,7 @@ namespace Rhetos.JsonCommands.Host.Test
         {
             var factory = new CustomWebApplicationFactory<Startup>();
             using var scope = factory.Services.CreateScope();
-            var dom = scope.ServiceProvider.GetRequiredService<IRhetosComponent<IDomainObjectModel>>().Value;
+            var parser = scope.ServiceProvider.GetRequiredService<WriteCommandsParser>();
 
             Guid guid = new Guid();
 
@@ -64,9 +67,7 @@ namespace Rhetos.JsonCommands.Host.Test
                 }}
             ]";
 
-            WriteCommandsParser parser = new WriteCommandsParser(json, dom);
-
-            List<Command> commands = parser.Parse();
+            List<Command> commands = parser.Parse(json);
             Assert.Single(commands);
             Assert.Equal("Bookstore.Book", commands[0].Entity);
             Assert.Single(commands[0].Operations);
@@ -78,7 +79,7 @@ namespace Rhetos.JsonCommands.Host.Test
         {
             var factory = new CustomWebApplicationFactory<Startup>();
             using var scope = factory.Services.CreateScope();
-            var dom = scope.ServiceProvider.GetRequiredService<IRhetosComponent<IDomainObjectModel>>().Value;
+            var parser = scope.ServiceProvider.GetRequiredService<WriteCommandsParser>();
 
             string json = $@"[
                 {{
@@ -93,21 +94,8 @@ namespace Rhetos.JsonCommands.Host.Test
                 }}
             ]";
 
-            WriteCommandsParser parser = new WriteCommandsParser(json, dom);
-
-            try
-            {
-                List<Command> commands = parser.Parse();
-                Assert.True(false, "The parser.Parse() call should have thrown a JsonException.");
-            }
-            catch (FormatException ex)
-            {
-                Assert.StartsWith("There are multiple Insert elements.", ex.Message);
-            }
-            catch (Exception)
-            {
-                Assert.True(false, "The exception type is incorrect.");
-            }
+            var ex = Assert.Throws<ClientException>(() => parser.Parse(json));
+            Assert.StartsWith("There are multiple Insert elements.", ex.Message);
         }
     }
 }

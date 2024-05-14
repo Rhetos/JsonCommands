@@ -17,9 +17,9 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Rhetos.Dsl;
 using Rhetos.Utilities;
 using System;
 using System.Collections.Generic;
@@ -34,7 +34,26 @@ namespace Rhetos.JsonCommands.Host.Utilities
         /// This is a wrapper around `JsonConvert.DeserializeObject`, because `DeserializeObject` returns null
         /// in case of an error, so the same error checking needs to be performed on each deserialization.
         /// </summary>
+        public static T DeserializeOrException<T>(string serialized)
+            => (T)DeserializeOrException(serialized, typeof(T));
+
+        /// <summary>
+        /// A custom error handler for JSON deserialization, that throws a Rhetos.ClientException with an error description.
+        /// This is a wrapper around `JsonConvert.DeserializeObject`, because `DeserializeObject` returns null
+        /// in case of an error, so the same error checking needs to be performed on each deserialization.
+        /// </summary>
         public static object DeserializeOrException(string serialized, Type type)
+            => DeserializeOrException(jsonSettings => JsonConvert.DeserializeObject(serialized, type, jsonSettings), () => serialized);
+
+        private static object DeserializeOrException(JToken jToken, Type type)
+            => DeserializeOrException(jsonSettings =>
+                {
+                    var jsonSerializer = JsonSerializer.CreateDefault(jsonSettings);
+                    return jToken.ToObject(type, jsonSerializer);
+                },
+                () => jToken.ToString());
+
+        private static object DeserializeOrException(Func<JsonSerializerSettings, object> deserializer, Func<string> errorContext)
         {
             var errors = new List<Exception>();
             var jsonSettings = new JsonSerializerSettings
@@ -46,26 +65,16 @@ namespace Rhetos.JsonCommands.Host.Utilities
                 }
             };
 
-            object deserialized = JsonConvert.DeserializeObject(serialized, type, jsonSettings);
+            object deserialized = deserializer(jsonSettings);
 
             if (errors.Any())
             {
-                var exception = new ClientException("The provided filter parameter has invalid JSON format. See server log for more information.", errors.First());
-                ExceptionsUtility.SetCommandSummary(exception, $"Filter parameter: '{CsUtility.Limit(serialized, 500, true)}'.");
+                var exception = new ClientException("The request has invalid JSON format. See the server log for more information.", errors.First());
+                ExceptionsUtility.SetCommandSummary(exception, $"Filter parameter: '{CsUtility.Limit(errorContext(), 500, true)}'.");
                 throw exception;
             }
             else
                 return deserialized;
-        }
-
-        /// <summary>
-        /// A custom error handler for JSON deserialization, that throws a Rhetos.ClientException with an error description.
-        /// This is a wrapper around `JsonConvert.DeserializeObject`, because `DeserializeObject` returns null
-        /// in case of an error, so the same error checking needs to be performed on each deserialization.
-        /// </summary>
-        public static T DeserializeOrException<T>(string serialized)
-        {
-            return (T)DeserializeOrException(serialized, typeof(T));
         }
 
         /// <summary>
@@ -74,7 +83,7 @@ namespace Rhetos.JsonCommands.Host.Utilities
         public static object FinishPartiallyDeserializedObject(object o, Type type)
         {
             if (o is JToken jToken)
-                return jToken.ToObject(type);
+                return DeserializeOrException(jToken, type);
             if (o is string s && type.IsValueType)
                 return DeserializeOrException(s, type);
             else

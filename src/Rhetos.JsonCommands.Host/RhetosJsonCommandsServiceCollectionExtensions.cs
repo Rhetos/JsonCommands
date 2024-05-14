@@ -22,6 +22,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Rhetos;
 using Rhetos.JsonCommands.Host;
 using Rhetos.JsonCommands.Host.Filters;
+using Rhetos.JsonCommands.Host.Parsers.Write;
 using Rhetos.JsonCommands.Host.Utilities;
 using System;
 
@@ -38,6 +39,9 @@ namespace Rhetos // The namespace should match the extension type RhetosServiceC
             builder.AddJsonCommandsFilters();
 
             builder.Services.AddOptions();
+
+            builder.Services.TryAddScoped<WriteCommandsParser>();
+            builder.Services.TryAddScoped<QueryParameters>();
 
             if (configureOptions != null)
             {

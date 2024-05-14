@@ -18,6 +18,7 @@
 */
 
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Rhetos.JsonCommands.Host.Parsers.Write;
 using Rhetos.JsonCommands.Host.Test.Tools;
@@ -32,14 +33,14 @@ using Xunit.Abstractions;
 
 namespace Rhetos.JsonCommands.Host.Test
 {
-    public class ErrorReportingTest : IDisposable
+    public class ErrorReportingLegacyTest : IDisposable
     {
         private readonly WebApplicationFactory<Startup> _factory;
         private readonly ITestOutputHelper output;
 
-        public ErrorReportingTest(ITestOutputHelper output)
+        public ErrorReportingLegacyTest(ITestOutputHelper output)
         {
-            _factory = new CustomWebApplicationFactory<Startup>();
+            _factory = new CustomWebApplicationFactory<Startup>().WithWebHostBuilder(builder => builder.UseLegacyErrorResponse());
             this.output = output;
         }
 
@@ -51,13 +52,13 @@ namespace Rhetos.JsonCommands.Host.Test
 
         [Theory]
         [InlineData("1",
-            @"400 {""Error"":{""Message"":""test1"",""Metadata"":{""SystemMessage"":""test2""}}}",
+            @"400 {""UserMessage"":""test1"",""SystemMessage"":""test2""}",
             "[Trace] Rhetos.JsonCommands.Host.Filters.ApiExceptionFilter:|Rhetos.UserException: test1|SystemMessage: test2")]
         [InlineData("2",
-            @"400 {""Error"":{""Message"":""test1""}}",
+            @"400 {""UserMessage"":""test1"",""SystemMessage"":null}",
             "[Trace] Rhetos.JsonCommands.Host.Filters.ApiExceptionFilter:|Rhetos.UserException: test1")]
         [InlineData("3",
-            @"400 {""Error"":{""Message"":""Exception of type 'Rhetos.UserException' was thrown.""}}",
+            @"400 {""UserMessage"":""Exception of type 'Rhetos.UserException' was thrown."",""SystemMessage"":null}",
             "[Trace] Rhetos.JsonCommands.Host.Filters.ApiExceptionFilter:|Rhetos.UserException: Exception of type 'Rhetos.UserException' was thrown.")]
         public async Task UserExceptionResponse(string index, string expectedResponse, string expectedLogPatterns)
         {
@@ -88,7 +89,7 @@ namespace Rhetos.JsonCommands.Host.Test
             var response = await PostAsyncTest(client, $"__Test__LocalizedUserException");
             string responseContent = await response.Content.ReadAsStringAsync();
 
-            Assert.Equal(@"400 {""Error"":{""Message"":""TestErrorMessage 1000""}}", $"{(int)response.StatusCode} {responseContent}");
+            Assert.Equal(@"400 {""UserMessage"":""TestErrorMessage 1000"",""SystemMessage"":null}", $"{(int)response.StatusCode} {responseContent}");
 
             output.WriteLine(string.Join(Environment.NewLine, logEntries.Where(e => e.Message.Contains("Exception"))));
             string[] exceptedLogPatterns = new[]
@@ -113,10 +114,8 @@ namespace Rhetos.JsonCommands.Host.Test
             string responseContent = await response.Content.ReadAsStringAsync();
 
             Assert.StartsWith(
-                @"500 {""Error"":{""Message"":""Internal server error occurred. See server log for more information. (ArgumentException, ",
+                @"500 {""UserMessage"":null,""SystemMessage"":""Internal server error occurred. See server log for more information. (ArgumentException, ",
                 $"{(int)response.StatusCode} {responseContent}");
-            Assert.DoesNotContain("SystemMessage", responseContent);
-            Assert.DoesNotContain("Metadata", responseContent);
 
             Assert.DoesNotContain(@"TestErrorMessage", $"{(int)response.StatusCode} {responseContent}");
             Assert.DoesNotContain(@"1000", $"{(int)response.StatusCode} {responseContent}");
@@ -126,9 +125,9 @@ namespace Rhetos.JsonCommands.Host.Test
             {
                 "[Error] Rhetos.JsonCommands.Host.Filters.ApiExceptionFilter",
                 "System.ArgumentException: Invalid error message format. Message: \"TestErrorMessage {0} {1}\", Parameters: \"1000\". Index (zero based) must be greater than or equal to zero and less than the size of the argument list.",
-                // The command summary ("Command: ...") is not reported by ProcessingEngine for UserExceptions to improved performance.
             };
             Assert.Equal(1, logEntries.Select(e => e.ToString()).Count(
+                // The command summary is not reported by ProcessingEngine for UserExceptions to improved performance.
                 entry => exceptedLogPatterns.All(pattern => entry.Contains(pattern))));
         }
 
@@ -144,7 +143,8 @@ namespace Rhetos.JsonCommands.Host.Test
             string responseContent = await response.Content.ReadAsStringAsync();
 
             Assert.Equal<object>(
-                @"400 {""Error"":{""Message"":""Operation could not be completed because the request sent to the server was not valid or not properly formatted."",""Metadata"":{""SystemMessage"":""test exception""}}}",
+                "400 {\"UserMessage\":\"Operation could not be completed because the request sent to the server was not valid or not properly formatted.\""
+                    + ",\"SystemMessage\":\"test exception\"}",
                 $"{(int)response.StatusCode} {responseContent}");
 
             output.WriteLine(string.Join(Environment.NewLine, logEntries));
@@ -168,7 +168,7 @@ namespace Rhetos.JsonCommands.Host.Test
             string responseContent = await response.Content.ReadAsStringAsync();
 
             Assert.StartsWith
-                ("500 {\"Error\":{\"Message\":\"Internal server error occurred. See server log for more information. (ArgumentException, " + DateTime.Now.ToString("yyyy-MM-dd"),
+                ("500 {\"UserMessage\":null,\"SystemMessage\":\"Internal server error occurred. See server log for more information. (ArgumentException, " + DateTime.Now.ToString("yyyy-MM-dd"),
                 $"{(int)response.StatusCode} {responseContent}");
 
             output.WriteLine(string.Join(Environment.NewLine, logEntries));
@@ -202,8 +202,8 @@ namespace Rhetos.JsonCommands.Host.Test
             var response = await client.PostAsync("jc/write", content);
             string responseContent = await response.Content.ReadAsStringAsync();
 
-            string expectedResponse = @"400 {""Error"":{""Message"":""Operation could not be completed because the request sent to the server was not valid or not properly formatted."","
-                + @"""Metadata"":{""SystemMessage"":""" + clientError + @"""}}}";
+            string expectedResponse = "400 {\"UserMessage\":\"Operation could not be completed because the request sent to the server was not valid or not properly formatted.\","
+                + "\"SystemMessage\":\"" + clientError + "\"}";
             Assert.Equal(expectedResponse, $"{(int)response.StatusCode} {responseContent}");
 
             output.WriteLine(string.Join(Environment.NewLine, logEntries));

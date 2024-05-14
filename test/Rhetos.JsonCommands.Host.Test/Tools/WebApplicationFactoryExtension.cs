@@ -38,6 +38,13 @@ namespace Rhetos.JsonCommands.Host
             return builder;
         }
 
+        public static IWebHostBuilder UseLegacyErrorResponse(this IWebHostBuilder builder, bool useLegacyErrorResponse = true)
+        {
+            return builder.ConfigureServices(
+                services => services.PostConfigure<JsonCommandsOptions>(
+                    options => options.UseLegacyErrorResponse = useLegacyErrorResponse));
+        }
+
         /// <summary>
         /// See <see cref="CommonConceptsRuntimeOptions.DynamicTypeResolution"/>.
         /// </summary>

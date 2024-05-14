@@ -17,12 +17,15 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.CodeAnalysis.Operations;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
 using Rhetos.Dom.DefaultConcepts;
 using Rhetos.JsonCommands.Host.Test.Tools;
 using Rhetos.JsonCommands.Host.Utilities;
+using Rhetos.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,7 +35,7 @@ using TestApp;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Rhetos.JsonCommands.Host
+namespace Rhetos.JsonCommands.Host.Test
 {
     public class FilterParametersTest : IDisposable
     {
@@ -52,32 +55,30 @@ namespace Rhetos.JsonCommands.Host
         }
 
         [Theory]
-
         // Generic filter:
-        [InlineData(false, "rest/Common/Claim/?filters=[{\"Property\":\"ID\",\"Operation\":\"in\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
-
+        [InlineData(false, "Common.Claim", "[{\"Property\":\"ID\",\"Operation\":\"in\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
         // Specific filter with simplified class name:
-        [InlineData(false, "rest/Common/Claim/?filters=[{\"Filter\":\"IEnumerable<Guid>\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
-        [InlineData(false, "rest/Common/Claim/?filters=[{\"Filter\":\"Guid[]\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
-        [InlineData(true, "rest/Common/Claim/?filters=[{\"Filter\":\"System.Guid[]\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
-        [InlineData(true, "rest/Common/Claim/?filters=[{\"Filter\":\"System.Collections.Generic.IEnumerable`1[[System.Guid]]\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
-
+        [InlineData(false, "Common.Claim", "[{\"Filter\":\"IEnumerable<Guid>\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
+        [InlineData(false, "Common.Claim", "[{\"Filter\":\"Guid[]\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
+        [InlineData(true, "Common.Claim", "[{\"Filter\":\"System.Guid[]\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
+        [InlineData(true, "Common.Claim", "[{\"Filter\":\"System.Collections.Generic.IEnumerable`1[[System.Guid]]\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
         // Specific filter with parameter name:
-        [InlineData(false, "rest/Common/MyClaim/?filters=[{\"Filter\":\"Common.Claim\",\"Value\":{\"ClaimResource\":\"Common.RolePermission\",\"ClaimRight\":\"Read\"}}]")]
-        [InlineData(false, "rest/Common/MyClaim/?filters=[{\"Filter\":\"Claim\",\"Value\":{\"ClaimResource\":\"Common.RolePermission\",\"ClaimRight\":\"Read\"}}]")]
-
+        [InlineData(false, "Common.MyClaim", "[{\"Filter\":\"Common.Claim\",\"Value\":{\"ClaimResource\":\"Common.RolePermission\",\"ClaimRight\":\"Read\"}}]")]
+        [InlineData(false, "Common.MyClaim", "[{\"Filter\":\"Claim\",\"Value\":{\"ClaimResource\":\"Common.RolePermission\",\"ClaimRight\":\"Read\"}}]")]
         // Deactivatable:
-        [InlineData(false, "rest/TestDeactivatable/BasicEnt/")]
-        [InlineData(true, "rest/TestDeactivatable/BasicEnt/?filters=[{\"Filter\":\"Rhetos.Dom.DefaultConcepts.ActiveItems,%20Rhetos.Dom.DefaultConcepts.Interfaces\"}]")]
-        [InlineData(false, "rest/TestDeactivatable/BasicEnt/?filters=[{\"Filter\":\"Rhetos.Dom.DefaultConcepts.ActiveItems\"}]")]
-        [InlineData(false, "rest/TestDeactivatable/BasicEnt/?filters=[{\"Filter\":\"ActiveItems\"}]")]
-
+        [InlineData(false, "TestDeactivatable.BasicEnt", "")]
+        [InlineData(true, "TestDeactivatable.BasicEnt", "[{\"Filter\":\"Rhetos.Dom.DefaultConcepts.ActiveItems,%20Rhetos.Dom.DefaultConcepts.Interfaces\"}]")]
+        [InlineData(false, "TestDeactivatable.BasicEnt", "[{\"Filter\":\"Rhetos.Dom.DefaultConcepts.ActiveItems\"}]")]
+        [InlineData(false, "TestDeactivatable.BasicEnt", "[{\"Filter\":\"ActiveItems\"}]")]
         // DateTime (old MS format):
-        [InlineData(false, "rest/TestHistory/Standard/")]
-        [InlineData(false, "rest/TestHistory/Standard/?filters=[{\"Filter\":\"System.DateTime\",\"Value\":\"/Date(1544195644420%2B0100)/\"}]")]
-
-        public async Task SupportedFilterParameters(bool dynamicOnly, string url)
+        [InlineData(false, "TestHistory.Standard", "")]
+        [InlineData(false, "TestHistory.Standard", "[{\"Filter\":\"System.DateTime\",\"Value\":\"/Date(1544195644420%2B0100)/\"}]")]
+        public async Task SupportedFilterParameters(bool dynamicOnly, string entity, string filters)
         {
+            string url = string.IsNullOrWhiteSpace(filters)
+                ? $@"jc/read?q=[{{""{entity}"": {{}}}}]"
+                : $@"jc/read?q=[{{""{entity}"": {{""filters"":{filters}}}}}]";
+
             await TestSupportedFilterParameters(false, url, shouldFail: dynamicOnly);
             await TestSupportedFilterParameters(true, url, shouldFail: false);
         }
@@ -102,84 +103,117 @@ namespace Rhetos.JsonCommands.Host
             Assert.Equal(shouldFail ? HttpStatusCode.BadRequest : HttpStatusCode.OK, response.StatusCode);
         }
 
-        [Fact]
+        const string urlQueryEscaped =    @"jc/read?q=[{""TestHistory.Standard"": {""filters"":[{""Filter"":""System.DateTime"",""Value"":""/Date(1544195644420%2b0100)/""}]}}]";
+        const string urlQueryNotEscaped = @"jc/read?q=[{""TestHistory.Standard"": {""filters"":[{""Filter"":""System.DateTime"",""Value"":""/Date(1544195644420+0100)/""}]}}]";
 
+        [Fact]
+        public async Task JsonValueTypeAsStringWithCorrectFormat()
+        {
+            var response = await GetResponse(urlQueryEscaped);
+
+            Assert.Equal(
+                "200 {\"Data\":[{\"Records\":[]}]}",
+                $"{response.StatusCode} {response.Content}");
+
+            var response2 = await GetResponse(urlQueryEscaped.Replace(@"""filters""", @"""ReadTotalCount"":true, ""filters"""));
+
+            Assert.Equal(
+                "200 {\"Data\":[{\"Records\":[],\"TotalCount\":0}]}",
+                $"{response.StatusCode} {response2.Content}");
+
+            var response3 = await GetResponse(urlQueryEscaped.Replace(@"""filters""", @"""ReadRecords"":false, ""ReadTotalCount"":true, ""filters"""));
+
+            Assert.Equal(
+                "200 {\"Data\":[{\"TotalCount\":0}]}",
+                $"{response.StatusCode} {response3.Content}");
+        }
+
+        [Fact]
         public async Task JsonValueTypeAsStringWithIncorrectFormat()
         {
-            string url = "rest/TestHistory/Standard/?filters=[{\"Filter\":\"System.DateTime\",\"Value\":\"/Date(1544195644420+0100)/\"}]";
+            var response = await GetResponse(urlQueryNotEscaped);
 
-            var logEntries = new LogEntries();
-            var client = _factory
-                .WithWebHostBuilder(builder => builder.MonitorLogging(logEntries))
-                .CreateClient();
-            var response = await client.GetAsync(url);
-            string responseContent = await response.Content.ReadAsStringAsync();
-
-            output.WriteLine(responseContent);
-            output.WriteLine(string.Join(Environment.NewLine, logEntries));
+            output.WriteLine(response.Content);
+            output.WriteLine(string.Join(Environment.NewLine, response.LogEntries));
 
             Assert.Equal<object>(
                 "400 {\"UserMessage\":\"Operation could not be completed because the request sent to the server was not valid or not properly formatted.\""
-                    + ",\"SystemMessage\":\"The provided filter parameter has invalid JSON format. See server log for more information.\"}",
-                $"{(int)response.StatusCode} {responseContent}");
+                    + ",\"SystemMessage\":\"The request has invalid JSON format. See the server log for more information.\"}",
+                $"{response.StatusCode} {response.Content}");
 
             string[] exceptedLogPatterns = new[] {
                 "[Information]",
-                "Rhetos.ClientException: The provided filter",
+                "Rhetos.ClientException: The request has invalid JSON format",
                 "/Date(1544195644420 0100)/",
                 "Error parsing comment. Expected: *, got D. Path '', line 1, position 1.",
                 "Filter parameter: '/Date(1544195644420 0100)/'."
                 // The command summary is not reported by ProcessingEngine, because the ClientException occurred before the command was constructed.
             };
-            Assert.Equal(1, logEntries.Select(e => e.ToString()).Count(
+            Assert.Equal(1, response.LogEntries.Select(e => e.ToString()).Count(
                 entry => exceptedLogPatterns.All(pattern => entry.Contains(pattern))));
         }
 
-        [Fact]
+        private async Task<(int StatusCode, string Content, LogEntries LogEntries)> GetResponse(string url, bool useLegacyErrorResponse = true)
+        {
+            var logEntries = new LogEntries();
+            var client = _factory
+                .WithWebHostBuilder(builder => builder.MonitorLogging(logEntries).UseLegacyErrorResponse(useLegacyErrorResponse))
+                .CreateClient();
+            var response = await client.GetAsync(url);
+            int statusCode = (int)response.StatusCode;
+            string responseContent = await response.Content.ReadAsStringAsync();
+            return (statusCode, responseContent, logEntries);
+        }
 
+        [Fact]
         public void LimitedDeserialization()
         {
             // This test checks that the QueryParameters will try to deserialized only types that are specified on the DataStructure as read parameters.
 
-            using (var scope = _factory.Services.CreateScope())
+            using var scope = _factory.Services.CreateScope();
+            var queryParameters = scope.ServiceProvider.GetRequiredService<QueryParameters>();
+            var repository = scope.ServiceProvider.GetRequiredService<IRhetosComponent<Common.DomRepository>>().Value;
+
+            string json = JsonConvert.SerializeObject(
+                    new List<object> { new Common.Role { Name = "ABC" } },
+                    new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All, TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Full });
+
+            string CreateFilters(string filterType, string filterValueJson) => $@"[{{""Filter"":""{filterType}"",""Value"":{filterValueJson}}}]";
+
             {
-                var queryParameters = scope.ServiceProvider.GetRequiredService<QueryParameters>();
-                var repository = scope.ServiceProvider.GetRequiredService<IRhetosComponent<Common.DomRepository>>().Value;
+                var extFilter = queryParameters.ParseFilterParameters(CreateFilters("IEnumerable<IEntity>", "[]"), "TestFilters.Simple");
+                var result = repository.TestFilters.Simple.Load(extFilter).Single().Name;
+                Assert.Equal("IE System.Collections.Generic.List`1[Rhetos.Dom.DefaultConcepts.IEntity] 0.", result);
+            }
+            {
+                var ce = Assert.Throws<ClientException>(() => queryParameters.ParseFilterParameters(CreateFilters("IEnumerable<IEntity>", json), "TestFilters.Simple"));
+                Assert.Contains("invalid JSON format", ce.Message);
 
-                string json = JsonConvert.SerializeObject(
-                        new List<object> { new Common.Role { Name = "ABC" } },
-                        new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.All, TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Full });
+                var response = scope.ServiceProvider.GetRequiredService<ErrorReporting>().CreateResponseFromException(ce, false);
 
-                string CreateFilters(string filterType, string filterValueJson) => $@"[{{""Filter"":""{filterType}"",""Value"":filterValueJson}}]";
+                Assert.Contains(@"Could not create an instance of type Rhetos.Dom.DefaultConcepts.IEntity. Type is an interface or abstract class and cannot be instantiated.", response.LogMessage);
+                Assert.DoesNotContain("IEntity", ce.Message); // The web response should not contain system details. The details are available in log.
 
-                {
-                    var extFilter = queryParameters.ParseFilterParameters(CreateFilters("IEnumerable<IEntity>", "[]"), "TestFilters.Simple");
-                    var result = repository.TestFilters.Simple.Load(extFilter).Single().Name;
-                    Assert.Equal("IE System.Collections.Generic.List`1[Rhetos.Dom.DefaultConcepts.IEntity] 0.", result);
-                }
-                {
-                    var e = Assert.Throws<ClientException>(() => queryParameters.ParseFilterParameters(CreateFilters("IEnumerable<IEntity>", json), "TestFilters.Simple"));
-                    Assert.Contains("invalid JSON format", e.Message);
-                }
-                {
-                    var e = Assert.Throws<ClientException>(() => queryParameters.ParseFilterParameters(CreateFilters("IEnumerable<Common.Role>", json), "TestFilters.Simple"));
-                    Assert.Contains("Filter type 'IEnumerable<Common.Role>' is not available", e.Message);
-                }
-
-                {
-                    var extFilter = queryParameters.ParseFilterParameters(CreateFilters("List<object>", "[]"), "TestFilters.Simple");
-                    var result = repository.TestFilters.Simple.Load(extFilter).Single().Name;
-                    Assert.Equal("List System.Collections.Generic.List`1[System.Object] 0 .", result);
-                }
-                {
-                    var extFilter = queryParameters.ParseFilterParameters(CreateFilters("List<object>", json), "TestFilters.Simple");
-                    var result = repository.TestFilters.Simple.Load(extFilter).Single().Name;
-                    Assert.Equal("List System.Collections.Generic.List`1[System.Object] 1 Newtonsoft.Json.Linq.JObject.", result);
-                }
-                {
-                    var e = Assert.Throws<ClientException>(() => queryParameters.ParseFilterParameters(CreateFilters("List<Common.Role>", json), "TestFilters.Simple"));
-                    Assert.Contains("Filter type 'List<Common.Role>' is not available", e.Message);
-                }
+                Assert.Contains(@"""Name"": ""ABC""", response.LogMessage);
+                Assert.DoesNotContain("ABC", ce.Message); // The web response should not contain system details. The details are available in log.
+            }
+            {
+                var e = Assert.Throws<ClientException>(() => queryParameters.ParseFilterParameters(CreateFilters("IEnumerable<Common.Role>", json), "TestFilters.Simple"));
+                Assert.Contains("Filter type 'IEnumerable<Common.Role>' is not available", e.Message);
+            }
+            {
+                var extFilter = queryParameters.ParseFilterParameters(CreateFilters("List<object>", "[]"), "TestFilters.Simple");
+                var result = repository.TestFilters.Simple.Load(extFilter).Single().Name;
+                Assert.Equal("List System.Collections.Generic.List`1[System.Object] 0 .", result);
+            }
+            {
+                var extFilter = queryParameters.ParseFilterParameters(CreateFilters("List<object>", json), "TestFilters.Simple");
+                var result = repository.TestFilters.Simple.Load(extFilter).Single().Name;
+                Assert.Equal("List System.Collections.Generic.List`1[System.Object] 1 Newtonsoft.Json.Linq.JObject.", result);
+            }
+            {
+                var e = Assert.Throws<ClientException>(() => queryParameters.ParseFilterParameters(CreateFilters("List<Common.Role>", json), "TestFilters.Simple"));
+                Assert.Contains("Filter type 'List<Common.Role>' is not available", e.Message);
             }
         }
     }

@@ -1,84 +1,98 @@
-﻿using Newtonsoft.Json;
-using Rhetos.Dom.DefaultConcepts;
+﻿/*
+    Copyright (C) 2014 Omega software d.o.o.
+
+    This file is part of Rhetos.
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as
+    published by the Free Software Foundation, either version 3 of the
+    License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Rhetos.Dom;
-using System.Collections.Generic;
-using System.IO;
+using Rhetos.Dom.DefaultConcepts;
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace Rhetos.JsonCommands.Host.Parsers.Write
 {
-    public class WriteCommandsParser : IDisposable
+    public class WriteCommandsParser
     {
-        IDomainObjectModel dom;
-        StringReader stringReader;
-        JsonTextReader reader;
-        JsonSerializer serializer;
+        private readonly IDomainObjectModel _dom;
+        private readonly ILogger<WriteCommandsParser> _logger;
+        private readonly JsonSerializer _serializer = new();
 
-        public WriteCommandsParser(string json, IDomainObjectModel dom)
+        public WriteCommandsParser(IRhetosComponent<IDomainObjectModel> dom, ILogger<WriteCommandsParser> logger)
         {
-            this.dom = dom;
-            stringReader = new StringReader(json);
-            reader = new JsonTextReader(stringReader);
-            serializer = new JsonSerializer();
+            _dom = dom.Value;
+            _logger = logger;
         }
 
-        public void Dispose()
+        public List<Command> Parse(string json)
         {
-            if (reader != null)
-            {
-                ((IDisposable)reader).Dispose();
-                reader = null;
-            }
-            if (stringReader != null)
-            {
-                stringReader.Dispose();
-                stringReader = null;
-            }
-        }
+            using var stringReader = new StringReader(json);
+            using var reader = new JsonTextReader(stringReader);
 
-        public List<Command> Parse()
-        {
             if (!reader.Read())
-                throw CreateException("Empty JSON.");
+                throw CreateClientException(reader, "Empty JSON.");
 
-            var commands = ReadArrayOfCommands();
-            ReadEnd();
+            List<Command> commands;
+            try
+            {
+                commands = ReadArrayOfCommands(reader);
+                ReadEnd(reader, "array");
+            }
+            catch (JsonException e)
+            {
+                throw CreateClientException(reader, "Invalid JSON format.", e.Message);
+            }
             return commands;
         }
 
-        List<Command> ReadArrayOfCommands()
+        List<Command> ReadArrayOfCommands(JsonTextReader reader)
         {
-            ReadToken(JsonToken.StartArray);
+            ReadToken(reader, JsonToken.StartArray);
 
             List<Command> commands = new();
 
             while (reader.TokenType != JsonToken.EndArray)
             {
-                var command = ReadCommand();
+                var command = ReadCommand(reader);
                 commands.Add(command);
             }
 
-            ReadToken(JsonToken.EndArray);
+            ReadToken(reader, JsonToken.EndArray);
             return commands;
         }
 
-        Command ReadCommand()
+        Command ReadCommand(JsonTextReader reader)
         {
-            ReadToken(JsonToken.StartObject);
+            ReadToken(reader, JsonToken.StartObject);
 
             if (reader.TokenType != JsonToken.PropertyName)
-                throw CreateException("There is an empty command.");
+                throw CreateClientException(reader, "There is an empty command.");
 
-            string entity = ReadPropertyName();
-            var entityType = dom.GetType(entity);
-            var operations = ReadCommandItems(entityType);
+            string entity = ReadPropertyName(reader);
+            var entityType = _dom.GetType(entity);
+            var operations = ReadCommandItems(reader, entityType);
 
             if (reader.TokenType == JsonToken.PropertyName)
-                throw CreateException("Svaka komanda u listi treba sadržavati samo po jedan entitet.");
+                throw CreateClientException(reader, "Each write command should contain only one entity name. For other entity type, add a separate command to the commands array.");
 
-            ReadToken(JsonToken.EndObject);
+            ReadToken(reader, JsonToken.EndObject);
             return new Command
             {
                 Entity = entity,
@@ -86,25 +100,25 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
             };
         }
 
-        object ReadToken(JsonToken jsonToken)
+        object ReadToken(JsonTextReader reader, JsonToken jsonToken)
         {
             if (reader.TokenType != jsonToken)
-                throw CreateException($"Expected token type {jsonToken}. Provided token is {reader.TokenType}.");
+                throw CreateClientException(reader, $"Expected token type {jsonToken}. Provided token is {reader.TokenType}.");
 
             object value = reader.Value;
             reader.Read();
             return value;
         }
 
-        string ReadPropertyName()
+        string ReadPropertyName(JsonTextReader reader)
         {
-            var propertyName = ReadToken(JsonToken.PropertyName);
+            var propertyName = ReadToken(reader, JsonToken.PropertyName);
             return (string)propertyName;
         }
 
-        List<SaveOperationItems> ReadCommandItems(Type entityType)
+        List<SaveOperationItems> ReadCommandItems(JsonTextReader reader, Type entityType)
         {
-            ReadToken(JsonToken.StartObject);
+            ReadToken(reader, JsonToken.StartObject);
 
             List<SaveOperationItems> operations = new();
 
@@ -112,44 +126,43 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
             {
                 operations.Add(new SaveOperationItems
                 {
-                    Operation = ReadPropertyName(),
-                    Items = ReadItemsArray(entityType)
+                    Operation = ReadPropertyName(reader),
+                    Items = ReadItemsArray(reader, entityType)
                 });
             }
 
-            ReadToken(JsonToken.EndObject);
+            ReadToken(reader, JsonToken.EndObject);
             return operations;
         }
 
-        IEntity[] ReadItemsArray(Type entityType)
+        IEntity[] ReadItemsArray(JsonTextReader reader, Type entityType)
         {
-            var itemsObject = serializer.Deserialize(reader, entityType.MakeArrayType());
+            var itemsObject = _serializer.Deserialize(reader, entityType.MakeArrayType());
             var items = ((ICollection)itemsObject).Cast<IEntity>().ToArray();
             reader.Read();
             return items;
         }
 
-        void ReadArrayOfItems()
-        {
-            ReadToken(JsonToken.StartArray);
-
-            while (reader.TokenType != JsonToken.EndArray)
-            {
-                ReadCommand();
-            }
-
-            ReadToken(JsonToken.EndArray);
-        }
-
-        void ReadEnd()
+        void ReadEnd(JsonTextReader reader, string lastType)
         {
             if (reader.Read())
-                throw CreateException("Not the end of JSON text.");
+                throw CreateClientException(reader, $"Unexpected JSON text after the end of JSON {lastType}.");
         }
 
-        Exception CreateException(string message)
+        /// <summary>
+        /// The <paramref name="message"/> should not contain any (potentially sensitive) data from the request.
+        /// It should contain only the structural information.
+        /// Provide <paramref name="additionalDataForLog"/> with additional information that could contain fragments of the request data.
+        /// </summary>
+        Exception CreateClientException(JsonTextReader reader, string message, string additionalDataForLog = null)
         {
-            return new JsonException(message + $" At line {reader.LineNumber}, position {reader.LinePosition}.");
+            string seeServerLog = "";
+            if (additionalDataForLog != null)
+            {
+                _logger.LogInformation("{0}", additionalDataForLog);
+                seeServerLog = " See the server log for more details on the error.";
+            }
+            return new ClientException($"{message} At line {reader.LineNumber}, position {reader.LinePosition}.{seeServerLog}");
         }
     }
 }

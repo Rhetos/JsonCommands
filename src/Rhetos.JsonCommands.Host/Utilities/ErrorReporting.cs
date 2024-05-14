@@ -19,6 +19,7 @@
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Rhetos.JsonCommands.Host.Parsers;
 using Rhetos.Utilities;
 using System;
@@ -33,51 +34,70 @@ namespace Rhetos.JsonCommands.Host.Utilities
     {
         private readonly ILocalizer localizer;
 
-        public interface IErrorResponse { }
-
-        public class ErrorResponse : IErrorResponse
-        {
-            public string Message { get; set; }
-            public Dictionary<string, string> Metadata { get; set; }
-
-            public ErrorResponse(string message, string metadata)
-            {
-                Message = message;
-                Metadata = ErrorResponseMetadataParser.Parse(metadata);
-            }
-
-            public ErrorResponse(string message, Dictionary<string, string> metadata)
-            {
-                Message = message;
-                Metadata = metadata;
-            }
-        }
-
-        public class LegacyErrorResponse : IErrorResponse
-        {
-            public string UserMessage { get;set; }
-            public string SystemMessage { get; set; }
-            public LegacyErrorResponse(string message, string systemMessage)
-            {
-                UserMessage = message;
-                SystemMessage = systemMessage;
-            }
-        }
-
         public ErrorReporting(IRhetosComponent<ILocalizer> rhetosLocalizer)
         {
             this.localizer = rhetosLocalizer.Value;
         }
 
-        public ErrorDescription CreateResponseFromException(Exception error, bool useLegacyErrorResponse)
+        public static object CreateErrorResponseMessage(string userMessage, string systemMessage, bool useLegacyErrorResponse)
+        {
+            if (useLegacyErrorResponse)
+                return new LegacyErrorResponse
+                {
+                    UserMessage = userMessage,
+                    SystemMessage = systemMessage,
+                };
+            else if (userMessage == null)
+                return new ErrorResponse
+                {
+                    Error = new ErrorResponseData
+                    {
+                        Message = systemMessage
+                    }
+                };
+            else
+                return new ErrorResponse
+                {
+                    Error = new ErrorResponseData
+                    {
+                        Message = userMessage,
+                        Metadata = ErrorResponseMetadataParser.Parse(systemMessage),
+                    }
+                };
+        }
+
+        private class ErrorResponse
+        {
+            public ErrorResponseData Error { get; set; }
+        }
+
+        private class ErrorResponseData
+        {
+            public string Message { get; set; }
+
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+            public Dictionary<string, string> Metadata { get; set; }
+        }
+
+        private class LegacyErrorResponse
+        {
+            public string UserMessage { get;set; }
+
+            public string SystemMessage { get; set; }
+        }
+
+        public ErrorDescription CreateResponseFromException(Exception exception, bool useLegacyErrorResponse)
         {
             int statusCode;
             string userMessage;
             string systemMessage;
             LogLevel logLevel;
-            string commandSummary = ExceptionsUtility.GetCommandSummary(error);
 
-            if (error is UserException userException)
+            string commandSummary = ExceptionsUtility.GetCommandSummary(exception);
+            string logMessage = exception.ToString() + (string.IsNullOrEmpty(commandSummary) ? ""
+                    : Environment.NewLine + "Command: " + commandSummary);
+
+            if (exception is UserException userException)
             {
                 statusCode = StatusCodes.Status400BadRequest;
                 logLevel = LogLevel.Trace;
@@ -85,7 +105,7 @@ namespace Rhetos.JsonCommands.Host.Utilities
                 userMessage = localizer[userException.UserMessage, userException.MessageParameters];
                 systemMessage = userException.SystemMessage;
             }
-            else if (error is ClientException clientException)
+            else if (exception is ClientException clientException)
             {
                 statusCode = GetStatusCode(clientException);
                 logLevel = LogLevel.Information;
@@ -107,15 +127,13 @@ namespace Rhetos.JsonCommands.Host.Utilities
                 logLevel = LogLevel.Error;
 
                 userMessage = null;
-                systemMessage = ErrorMessages.GetInternalServerErrorMessage(localizer, error);
+                systemMessage = ErrorMessages.GetInternalServerErrorMessage(localizer, exception);
             }
 
 
-            IErrorResponse errorResponse = useLegacyErrorResponse 
-                ? new LegacyErrorResponse(userMessage, systemMessage)
-                : new ErrorResponse(userMessage, systemMessage);
+            object errorResponse = CreateErrorResponseMessage(userMessage, systemMessage, useLegacyErrorResponse);
 
-            return new ErrorDescription(statusCode, errorResponse, logLevel, commandSummary);
+            return new ErrorDescription(statusCode, errorResponse, logLevel, logMessage);
         }
 
         private int GetStatusCode(ClientException clientException)
@@ -128,23 +146,5 @@ namespace Rhetos.JsonCommands.Host.Utilities
         }
     }
 
-    public class ErrorDescription
-    {
-        /// <summary>HTTP response status code.</summary>
-        public int StatusCode { get; }
-
-        public object Response { get; }
-
-        public LogLevel Severity { get; }
-
-        public string CommandSummary { get; }
-
-        public ErrorDescription(int statusCode, object response, LogLevel severity, string commandSummary)
-        {
-            this.StatusCode = statusCode;
-            this.Response = response;
-            this.Severity = severity;
-            this.CommandSummary = commandSummary;
-        }
-    }
+    public record ErrorDescription(int HttpStatusCode, object Response, LogLevel Severity, string LogMessage);
 }

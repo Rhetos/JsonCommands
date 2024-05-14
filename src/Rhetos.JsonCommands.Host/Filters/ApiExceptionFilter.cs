@@ -26,7 +26,6 @@ using Microsoft.Extensions.Options;
 using Rhetos.JsonCommands.Host.Utilities;
 using System;
 using System.Linq;
-using static Rhetos.JsonCommands.Host.Utilities.ErrorReporting;
 
 namespace Rhetos.JsonCommands.Host.Filters
 {
@@ -82,9 +81,7 @@ namespace Rhetos.JsonCommands.Host.Filters
                 systemMessage = $"Parameter error: Supplied value for parameter '{invalidModelEntry.Key}' couldn't be parsed.\n" + errors;
             }
 
-            IErrorResponse responseMessage = options.Value.UseLegacyErrorResponse
-                ? new LegacyErrorResponse(null, systemMessage)
-                : new ErrorResponse(null, systemMessage);
+            object responseMessage = ErrorReporting.CreateErrorResponseMessage(null, systemMessage, options.Value.UseLegacyErrorResponse);
             
             context.Result = new JsonResult(responseMessage) { StatusCode = StatusCodes.Status400BadRequest };
         }
@@ -95,14 +92,10 @@ namespace Rhetos.JsonCommands.Host.Filters
             {
                 var error = jsonErrorHandler.CreateResponseFromException(context.Exception, options.Value.UseLegacyErrorResponse);
 
-                context.Result = new JsonResult(error.Response) { StatusCode = error.StatusCode };
+                context.Result = new JsonResult(error.Response) { StatusCode = error.HttpStatusCode };
                 context.ExceptionHandled = true;
 
-                string commandSummerReport =
-                    string.IsNullOrEmpty(error.CommandSummary) ? ""
-                    : Environment.NewLine + "Command: " + error.CommandSummary;
-
-                logger.Log(error.Severity, context.Exception.ToString() + commandSummerReport);
+                logger.Log(error.Severity, error.LogMessage);
             }
         }
     }

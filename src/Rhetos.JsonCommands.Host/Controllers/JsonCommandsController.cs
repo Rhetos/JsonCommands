@@ -1,7 +1,25 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿/*
+    Copyright (C) 2014 Omega software d.o.o.
+
+    This file is part of Rhetos.
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as
+    published by the Free Software Foundation, either version 3 of the
+    License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel;
+using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Rhetos;
 using Rhetos.Dom;
 using Rhetos.Dom.DefaultConcepts;
 using Rhetos.JsonCommands.Host.Filters;
@@ -9,7 +27,6 @@ using Rhetos.JsonCommands.Host.Parsers.Write;
 using Rhetos.JsonCommands.Host.Utilities;
 using Rhetos.Processing;
 using Rhetos.Processing.DefaultCommands;
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -18,8 +35,9 @@ using System.Threading.Tasks;
 namespace Rhetos.JsonCommands.Host.Controllers
 {
     /// <summary>
-    /// Web API used for saving multiple records at once.
-    /// ALlows inserting, deleting and updating multiple records from multiple entities in a single web request (within a single database transaction)
+    /// Web API used for writing and reading multiple records at once.
+    /// The write method allows inserting, deleting and updating multiple records from multiple entities in a single web request (within a single database transaction).
+    /// The read method allows reading multiple entity types with different filters in a single web request.
     /// An example JSON format for the data to be sent is described in this comment: https://github.com/Rhetos/Rhetos/issues/355#issuecomment-915180224
     /// </summary>
     [Route("jc")]
@@ -28,15 +46,15 @@ namespace Rhetos.JsonCommands.Host.Controllers
     [ServiceFilter(typeof(ApiExceptionFilter))]
     public class JsonCommandsController : ControllerBase
     {
-        private readonly IDomainObjectModel _dom;
+        private readonly WriteCommandsParser _writeCommandsParser;
         private readonly IProcessingEngine _processingEngine;
-        private readonly IRhetosComponent<GenericFilterHelper> _genericFilterHelper;
+        private readonly QueryParameters _queryParameters;
 
-        public JsonCommandsController(IRhetosComponent<IDomainObjectModel> dom, IRhetosComponent<IProcessingEngine> processingEngine, IRhetosComponent<GenericFilterHelper> genericFilterHelper)
+        public JsonCommandsController(WriteCommandsParser writeCommandsParser, IRhetosComponent<IProcessingEngine> processingEngine, QueryParameters queryParameters)
         {
-            _dom = dom.Value;
+            _writeCommandsParser = writeCommandsParser;
             _processingEngine = processingEngine.Value;
-            _genericFilterHelper = genericFilterHelper;
+            _queryParameters = queryParameters;
         }
 
         [HttpPost("write")]
@@ -48,7 +66,7 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 body = await reader.ReadToEndAsync();
             };
 
-            var commands = new WriteCommandsParser(body, _dom).Parse();
+            var commands = _writeCommandsParser.Parse(body);
             var saveEntityCommands = new List<ICommandInfo>();
 
             foreach (var command in commands)
@@ -67,19 +85,22 @@ namespace Rhetos.JsonCommands.Host.Controllers
         }
 
         [HttpPost("read")]
-        public IActionResult ReadPost(List<Dictionary<string, ReadCommand>> commands)
+        public ActionResult<ReadResponse> ReadPost(List<Dictionary<string, ReadCommand>> commands)
         {
             return Read(commands);
         }
 
         [HttpGet("read")]
-        public IActionResult ReadGet(string query)
+        public ActionResult<ReadResponse> ReadGet(string q)
         {
-            var commands = JsonConvert.DeserializeObject<List<Dictionary<string, ReadCommand>>>(query);
+            if (string.IsNullOrEmpty(q))
+                throw new ClientException($"Query parameter '{nameof(q)}' is required.");
+
+            var commands = JsonHelper.DeserializeOrException<List<Dictionary<string, ReadCommand>>>(q);
             return Read(commands);
         }
 
-        private IActionResult Read(List<Dictionary<string, ReadCommand>> commands)
+        private ActionResult<ReadResponse> Read(List<Dictionary<string, ReadCommand>> commands)
         {
             var readCommands = new List<ICommandInfo>();
 
@@ -88,7 +109,7 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 var command = commandDict.Single(); // Each command is deserialized as a dictionary to simplify the code, but only one key-value pair is allowed.
                 string entityName = command.Key;
                 ReadCommand properties = command.Value;
-                new QueryParameters(_genericFilterHelper).FinishPartiallyDeserializedFilters(entityName, properties.Filters);
+                _queryParameters.FinishPartiallyDeserializedFilters(entityName, properties.Filters);
 
                 var readCommand = new ReadCommandInfo
                 {
@@ -106,7 +127,14 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 };
                 readCommands.Add(readCommand);
             }
-            return Ok(_processingEngine.Execute(readCommands));
+            var result = _processingEngine.Execute(readCommands);
+            var response = new
+            {
+                Data = result.CommandResults.Cast<ReadCommandResult>()
+                    .Select(r => new ReadCommandResponse { Records = r.Records, TotalCount = r.TotalCount })
+                    .ToList()
+            };
+            return Ok(response);
         }
 
         public class ReadCommand
@@ -117,6 +145,20 @@ namespace Rhetos.JsonCommands.Host.Controllers
             public bool ReadTotalCount { get; set; } = false;
             public int Skip { get; set; } = 0;
             public int Top { get; set; } = 0;
+        }
+
+        public class ReadResponse
+        {
+            public ICollection<ReadCommandResponse> Data { get; set; }
+        }
+
+        public class ReadCommandResponse
+        {
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+            public object[] Records { get; set; }
+
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+            public int? TotalCount { get; set; }
         }
     }
 }
