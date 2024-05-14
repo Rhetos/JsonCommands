@@ -5,19 +5,22 @@ using Rhetos;
 using Rhetos.Dom;
 using Rhetos.Dom.DefaultConcepts;
 using Rhetos.JsonCommands.Host.Filters;
+using Rhetos.JsonCommands.Host.Parsers.Write;
 using Rhetos.JsonCommands.Host.Utilities;
 using Rhetos.Processing;
 using Rhetos.Processing.DefaultCommands;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Rhetos.JsonCommands.Host.Controllers
 {
     /// <summary>
-    /// Web API za snimanje više zapisa odjednom.
-    /// Omogućuje da se u jednom web requestu (i u jednoj db transakciji) odjednom inserta, deletea i updatea više zapisa od više različitih entiteta.
-    /// Primjer JSON formata za podatke koje treba poslati je opisan u ovom komentaru: https://github.com/Rhetos/Rhetos/issues/355#issuecomment-915180224
+    /// Web API used for saving multiple records at once.
+    /// ALlows inserting, deleting and updating multiple records from multiple entities in a single web request (within a single database transaction)
+    /// An example JSON format for the data to be sent is described in this comment: https://github.com/Rhetos/Rhetos/issues/355#issuecomment-915180224
     /// </summary>
     [Route("jc")]
     [ApiController]
@@ -37,25 +40,29 @@ namespace Rhetos.JsonCommands.Host.Controllers
         }
 
         [HttpPost("write")]
-        public IActionResult Write(List<Dictionary<string, JObject>> commands)
+        public async Task<IActionResult> Write()
         {
-            foreach (var commandDict in commands)
+            string body;
+            using (StreamReader reader = new StreamReader(Request.Body))
             {
-                var command = commandDict.Single(); // Each command is deserialized as a dictionary to simplify the code, but only one key-value pair is allowed.
-                string entityName = command.Key;
-                Type entityType = _dom.GetType(entityName);
-                Type itemsType = typeof(WriteCommandItems<>).MakeGenericType(entityType);
-                dynamic items = command.Value.ToObject(itemsType);
+                body = await reader.ReadToEndAsync();
+            };
 
+            var commands = new WriteCommandsParser(body, _dom).Parse();
+            var saveEntityCommands = new List<ICommandInfo>();
+
+            foreach (var command in commands)
+            {
                 var saveEntityCommand = new SaveEntityCommandInfo
                 {
-                    Entity = entityName,
-                    DataToDelete = items.Delete,
-                    DataToUpdate = items.Update,
-                    DataToInsert = items.Insert
+                    Entity = command.Entity,
+                    DataToDelete = command.DeleteOperationItems(),
+                    DataToUpdate = command.UpdateOperationItems(),
+                    DataToInsert = command.InsertOperationItems()
                 };
-                _processingEngine.Execute(saveEntityCommand);
+                saveEntityCommands.Add(saveEntityCommand);
             }
+            _processingEngine.Execute(saveEntityCommands);
             return Ok();
         }
 
@@ -100,13 +107,6 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 readCommands.Add(readCommand);
             }
             return Ok(_processingEngine.Execute(readCommands));
-        }
-
-        private class WriteCommandItems<T> where T : IEntity
-        {
-            public T[] Delete { get; set; }
-            public T[] Update { get; set; }
-            public T[] Insert { get; set; }
         }
 
         public class ReadCommand
