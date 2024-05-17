@@ -19,6 +19,7 @@
 
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Logging;
+using Rhetos.JsonCommands.Host.Filters;
 using Rhetos.JsonCommands.Host.Parsers.Write;
 using Rhetos.JsonCommands.Host.Test.Tools;
 using System;
@@ -151,7 +152,7 @@ namespace Rhetos.JsonCommands.Host.Test
             string[] exceptedLogPatterns = new[] {
                 "[Information] Rhetos.JsonCommands.Host.Filters.ApiExceptionFilter:",
                 "Rhetos.ClientException: test exception",
-                "Command: SaveEntityCommandInfo Bookstore.Book" };
+                "Rhetos.Command.Summary: SaveEntityCommandInfo Bookstore.Book" };
             Assert.Equal(1, logEntries.Select(e => e.ToString()).Count(
                 entry => exceptedLogPatterns.All(pattern => entry.Contains(pattern))));
         }
@@ -175,7 +176,7 @@ namespace Rhetos.JsonCommands.Host.Test
             string[] exceptedLogPatterns = new[] {
                 "[Error] Rhetos.JsonCommands.Host.Filters.ApiExceptionFilter:",
                 "System.ArgumentException: test exception",
-                "Command: SaveEntityCommandInfo Bookstore.Book" };
+                "Rhetos.Command.Summary: SaveEntityCommandInfo Bookstore.Book" };
             Assert.Equal(1, logEntries.Select(e => e.ToString()).Count(
                 entry => exceptedLogPatterns.All(pattern => entry.Contains(pattern))));
         }
@@ -207,7 +208,9 @@ namespace Rhetos.JsonCommands.Host.Test
             Assert.Equal(expectedResponse, $"{(int)response.StatusCode} {responseContent}");
 
             output.WriteLine(string.Join(Environment.NewLine, logEntries));
-            Assert.Equal(serverLog, logEntries.SingleOrDefault(entry => entry.LogLevel == LogLevel.Information && entry.CategoryName.Contains(nameof(WriteCommandsParser)))?.Message);
+            Assert.Contains(serverLog, logEntries.SingleOrDefault(
+                entry => entry.LogLevel == LogLevel.Information
+                    && entry.CategoryName.Contains(nameof(ApiExceptionFilter)))?.Message);
         }
 
         private async Task<HttpResponseMessage> PostAsyncTest(HttpClient client, string testName)

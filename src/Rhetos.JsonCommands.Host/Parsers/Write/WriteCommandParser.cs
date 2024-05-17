@@ -21,6 +21,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Rhetos.Dom;
 using Rhetos.Dom.DefaultConcepts;
+using Rhetos.Utilities;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -32,13 +33,11 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
     public class WriteCommandsParser
     {
         private readonly IDomainObjectModel _dom;
-        private readonly ILogger<WriteCommandsParser> _logger;
         private readonly JsonSerializer _serializer = new();
 
-        public WriteCommandsParser(IRhetosComponent<IDomainObjectModel> dom, ILogger<WriteCommandsParser> logger)
+        public WriteCommandsParser(IRhetosComponent<IDomainObjectModel> dom)
         {
             _dom = dom.Value;
-            _logger = logger;
         }
 
         public List<Command> Parse(string json)
@@ -152,17 +151,18 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
         /// <summary>
         /// The <paramref name="message"/> should not contain any (potentially sensitive) data from the request.
         /// It should contain only the structural information.
-        /// Provide <paramref name="additionalDataForLog"/> with additional information that could contain fragments of the request data.
+        /// Provide <paramref name="additionalDataForLog"/> with additional information that may contain fragments of the request data.
         /// </summary>
         Exception CreateClientException(JsonTextReader reader, string message, string additionalDataForLog = null)
         {
-            string seeServerLog = "";
+            string exceptionMessage = $"{message} At line {reader.LineNumber}, position {reader.LinePosition}.";
             if (additionalDataForLog != null)
-            {
-                _logger.LogInformation("{0}", additionalDataForLog);
-                seeServerLog = " See the server log for more details on the error.";
-            }
-            return new ClientException($"{message} At line {reader.LineNumber}, position {reader.LinePosition}.{seeServerLog}");
+                exceptionMessage += " See the server log for more details on the error.";
+
+            var ce = new ClientException(exceptionMessage);
+            if (additionalDataForLog != null)
+                ce.Data["Rhetos.JsonError"] = additionalDataForLog;
+            return ce;
         }
     }
 }

@@ -20,6 +20,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Rhetos.JsonCommands.Host.Parsers.Write;
 using Rhetos.JsonCommands.Host.Test.Tools;
+using Rhetos.JsonCommands.Host.Utilities;
 using System;
 using System.Collections.Generic;
 using TestApp;
@@ -37,15 +38,18 @@ namespace Rhetos.JsonCommands.Host.Test
         [InlineData("[{}]", "There is an empty command.")]
         public void ParserTestShouldFail(string json, string clientError, string serverLog = null)
         {
-            var logEntries = new LogEntries();
-            var factory = new CustomWebApplicationFactory<Startup>().WithWebHostBuilder(builder => builder.MonitorLogging(logEntries));
+            var factory = new CustomWebApplicationFactory<Startup>();
             using var scope = factory.Services.CreateScope();
             var parser = scope.ServiceProvider.GetRequiredService<WriteCommandsParser>();
 
             var ex = Assert.Throws<ClientException>(() => parser.Parse(json));
             Assert.StartsWith(clientError, ex.Message);
             if (serverLog != null)
-                Assert.Contains(logEntries, e => e.Message.StartsWith(serverLog));
+            {
+                Assert.DoesNotContain(serverLog, ex.Message);
+                var error = scope.ServiceProvider.GetRequiredService<ErrorReporting>().CreateResponseFromException(ex, useLegacyErrorResponse: false);
+                Assert.Contains(serverLog, error.LogMessage);
+            }
         }
 
         [Fact]

@@ -70,7 +70,7 @@ namespace Rhetos.JsonCommands.Host.Utilities
             if (errors.Any())
             {
                 var exception = new ClientException("The request has invalid JSON format. See the server log for more information.", errors.First());
-                ExceptionsUtility.SetCommandSummary(exception, $"Filter parameter: '{CsUtility.Limit(errorContext(), 500, true)}'.");
+                exception.Data["Rhetos.JsonError"] = $"Filter parameter: '{CsUtility.Limit(errorContext(), 1000, true)}'.";
                 throw exception;
             }
             else

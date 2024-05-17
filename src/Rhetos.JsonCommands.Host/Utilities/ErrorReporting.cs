@@ -24,6 +24,8 @@ using Rhetos.JsonCommands.Host.Parsers;
 using Rhetos.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 
 namespace Rhetos.JsonCommands.Host.Utilities
 {
@@ -94,9 +96,10 @@ namespace Rhetos.JsonCommands.Host.Utilities
             LogLevel logLevel;
 
             string commandSummary = ExceptionsUtility.GetCommandSummary(exception);
-            string logMessage = exception.ToString() + (string.IsNullOrEmpty(commandSummary) ? ""
-                    : Environment.NewLine + "Command: " + commandSummary);
-
+            StringBuilder logMessage = new(exception.ToString());
+            foreach (var key in exception.Data.Keys.OfType<string>().Where(key => key.StartsWith("Rhetos.")))
+                logMessage.AppendLine().Append($"{key}: {exception.Data[key]}");
+            
             if (exception is UserException userException)
             {
                 statusCode = StatusCodes.Status400BadRequest;
@@ -133,7 +136,7 @@ namespace Rhetos.JsonCommands.Host.Utilities
 
             object errorResponse = CreateErrorResponseMessage(userMessage, systemMessage, useLegacyErrorResponse);
 
-            return new ErrorDescription(statusCode, errorResponse, logLevel, logMessage);
+            return new ErrorDescription(statusCode, errorResponse, logLevel, logMessage.ToString());
         }
 
         private int GetStatusCode(ClientException clientException)

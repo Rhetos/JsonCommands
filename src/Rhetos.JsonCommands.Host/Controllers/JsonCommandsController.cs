@@ -85,13 +85,13 @@ namespace Rhetos.JsonCommands.Host.Controllers
         }
 
         [HttpPost("read")]
-        public ActionResult<ReadResponse> ReadPost(List<Dictionary<string, ReadCommand>> commands)
+        public ActionResult<ReadResponse> ReadPost([FromBody] List<Dictionary<string, ReadCommand>> commands)
         {
             return Read(commands);
         }
 
         [HttpGet("read")]
-        public ActionResult<ReadResponse> ReadGet(string q)
+        public ActionResult<ReadResponse> ReadGet([FromQuery] string q)
         {
             if (string.IsNullOrEmpty(q))
                 throw new ClientException($"Query parameter '{nameof(q)}' is required.");

@@ -35,8 +35,11 @@ namespace Rhetos.JsonCommands.Host.Parsers
                 var result = metadata
                     .Select(element => element.Split(':', 2))
                     .ToDictionary(keySelector: (element) => element[0].Trim(), elementSelector: (element) => element[1]);
+
                 if (result.All(r => !string.IsNullOrEmpty(r.Key)))
+                {
                     return result;
+                }
             }
             return new Dictionary<string, string> { { "SystemMessage", message } };
         }
