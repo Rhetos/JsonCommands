@@ -53,6 +53,8 @@ namespace Rhetos.JsonCommands.Host.Utilities
                 },
                 () => jToken.ToString());
 
+        public const string RhetosJsonErrorErrorMetadata = "Rhetos.JsonError";
+
         private static object DeserializeOrException(Func<JsonSerializerSettings, object> deserializer, Func<string> errorContext)
         {
             var errors = new List<Exception>();
@@ -70,7 +72,7 @@ namespace Rhetos.JsonCommands.Host.Utilities
             if (errors.Any())
             {
                 var exception = new ClientException("The request has invalid JSON format. See the server log for more information.", errors.First());
-                exception.Data["Rhetos.JsonError"] = $"Filter parameter: '{CsUtility.Limit(errorContext(), 1000, true)}'.";
+                exception.Data[RhetosJsonErrorErrorMetadata] = $"Filter parameter: '{CsUtility.Limit(errorContext(), 1000, true)}'.";
                 throw exception;
             }
             else

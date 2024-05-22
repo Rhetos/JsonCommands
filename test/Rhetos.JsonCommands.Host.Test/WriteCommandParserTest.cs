@@ -22,7 +22,7 @@ using Rhetos.JsonCommands.Host.Parsers.Write;
 using Rhetos.JsonCommands.Host.Test.Tools;
 using Rhetos.JsonCommands.Host.Utilities;
 using System;
-using System.Collections.Generic;
+using System.Linq;
 using TestApp;
 using Xunit;
 
@@ -30,12 +30,14 @@ namespace Rhetos.JsonCommands.Host.Test
 {
     public class WriteCommandParserTest
     {
-
         [Theory]
         [InlineData("", "Empty JSON.")]
         [InlineData("[", "Expected token type StartObject.")]
         [InlineData("[{]", "Invalid JSON format. At line 1, position 2. See the server log for more details on the error.", "Invalid property identifier character: ].")]
         [InlineData("[{}]", "There is an empty command.")]
+        [InlineData("[{\"e\":{\"insert\":[]}}]", "Incorrect entity name 'e'.")]
+        [InlineData("[{\"Common.Role\":{\"op\":[]}}]", "Invalid save operation 'op'.")]
+        [InlineData("[{\"Common.Role\":{\"insert\":[],\"insert\":[]}}]", "There are multiple \"Insert\" operations. Use one operation with multiple records.")]
         public void ParserTestShouldFail(string json, string clientError, string serverLog = null)
         {
             var factory = new CustomWebApplicationFactory<Startup>();
@@ -71,11 +73,11 @@ namespace Rhetos.JsonCommands.Host.Test
                 }}
             ]";
 
-            List<Command> commands = parser.Parse(json);
-            Assert.Single(commands);
-            Assert.Equal("Bookstore.Book", commands[0].Entity);
-            Assert.Single(commands[0].Operations);
-            Assert.True(commands[0].Operations[0].IsInsert);
+            var commands = parser.Parse(json);
+
+            Assert.Equal(
+                "Bookstore.Book insert:1 update: delete:",
+                string.Join(", ", commands.Select(c => $"{c.Entity} insert:{c.DataToInsert?.Length} update:{c.DataToUpdate?.Length} delete:{c.DataToDelete?.Length}")));
         }
 
         [Fact]
@@ -99,7 +101,7 @@ namespace Rhetos.JsonCommands.Host.Test
             ]";
 
             var ex = Assert.Throws<ClientException>(() => parser.Parse(json));
-            Assert.StartsWith("There are multiple Insert elements.", ex.Message);
+            Assert.StartsWith("There are multiple \"Insert\" operations.", ex.Message);
         }
     }
 }

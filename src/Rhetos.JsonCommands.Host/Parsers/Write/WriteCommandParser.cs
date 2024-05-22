@@ -17,11 +17,11 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Rhetos.Dom;
 using Rhetos.Dom.DefaultConcepts;
-using Rhetos.Utilities;
+using Rhetos.JsonCommands.Host.Utilities;
+using Rhetos.Processing.DefaultCommands;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -40,7 +40,7 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
             _dom = dom.Value;
         }
 
-        public List<Command> Parse(string json)
+        public List<SaveEntityCommandInfo> Parse(string json)
         {
             using var stringReader = new StringReader(json);
             using var reader = new JsonTextReader(stringReader);
@@ -48,7 +48,7 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
             if (!reader.Read())
                 throw CreateClientException(reader, "Empty JSON.");
 
-            List<Command> commands;
+            List<SaveEntityCommandInfo> commands;
             try
             {
                 commands = ReadArrayOfCommands(reader);
@@ -61,11 +61,11 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
             return commands;
         }
 
-        List<Command> ReadArrayOfCommands(JsonTextReader reader)
+        List<SaveEntityCommandInfo> ReadArrayOfCommands(JsonTextReader reader)
         {
             ReadToken(reader, JsonToken.StartArray);
 
-            List<Command> commands = new();
+            List<SaveEntityCommandInfo> commands = new();
 
             while (reader.TokenType != JsonToken.EndArray)
             {
@@ -77,7 +77,7 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
             return commands;
         }
 
-        Command ReadCommand(JsonTextReader reader)
+        SaveEntityCommandInfo ReadCommand(JsonTextReader reader)
         {
             ReadToken(reader, JsonToken.StartObject);
 
@@ -86,17 +86,55 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
 
             string entity = ReadPropertyName(reader);
             var entityType = _dom.GetType(entity);
+            if (entityType == null)
+                throw CreateClientException(reader, $"Incorrect entity name '{entity}'.");
             var operations = ReadCommandItems(reader, entityType);
 
             if (reader.TokenType == JsonToken.PropertyName)
                 throw CreateClientException(reader, "Each write command should contain only one entity name. For other entity type, add a separate command to the commands array.");
 
             ReadToken(reader, JsonToken.EndObject);
-            return new Command
+            return CreateSaveCommand(entity, operations);
+        }
+
+        private SaveEntityCommandInfo CreateSaveCommand(string entity, List<SaveOperationItems> saveOperations)
+        {
+            var command = new SaveEntityCommandInfo { Entity = entity };
+
+            const string deleteName = "Delete";
+            const string updateName = "Update";
+            const string insertName = "Insert";
+
+            foreach (var saveOperation in saveOperations)
             {
-                Entity = entity,
-                Operations = operations
-            };
+                if (saveOperation.Operation.Equals(deleteName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (command.DataToDelete == null)
+                        command.DataToDelete = saveOperation.Items;
+                    else
+                        throw new ClientException($"There are multiple \"{deleteName}\" operations. Use one operation with multiple records.");
+                }
+                else if (saveOperation.Operation.Equals(updateName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (command.DataToUpdate == null)
+                        command.DataToUpdate = saveOperation.Items;
+                    else
+                        throw new ClientException($"There are multiple \"{updateName}\" operations. Use one operation with multiple records.");
+                }
+                else if (saveOperation.Operation.Equals(insertName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (command.DataToInsert == null)
+                        command.DataToInsert = saveOperation.Items;
+                    else
+                        throw new ClientException($"There are multiple \"{insertName}\" operations. Use one operation with multiple records.");
+                }
+                else
+                {
+                    throw new ClientException($"Invalid save operation '{saveOperation.Operation}'.");
+                }
+            }
+
+            return command;
         }
 
         object ReadToken(JsonTextReader reader, JsonToken jsonToken)
@@ -161,7 +199,7 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
 
             var ce = new ClientException(exceptionMessage);
             if (additionalDataForLog != null)
-                ce.Data["Rhetos.JsonError"] = additionalDataForLog;
+                ce.Data[JsonHelper.RhetosJsonErrorErrorMetadata] = additionalDataForLog;
             return ce;
         }
     }

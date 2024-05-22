@@ -64,20 +64,7 @@ namespace Rhetos.JsonCommands.Host.Controllers
                 body = await reader.ReadToEndAsync();
             };
 
-            var commands = _writeCommandsParser.Parse(body);
-            var saveEntityCommands = new List<ICommandInfo>();
-
-            foreach (var command in commands)
-            {
-                var saveEntityCommand = new SaveEntityCommandInfo
-                {
-                    Entity = command.Entity,
-                    DataToDelete = command.DeleteOperationItems(),
-                    DataToUpdate = command.UpdateOperationItems(),
-                    DataToInsert = command.InsertOperationItems()
-                };
-                saveEntityCommands.Add(saveEntityCommand);
-            }
+            var saveEntityCommands = _writeCommandsParser.Parse(body).ToList<ICommandInfo>();
             _processingEngine.Execute(saveEntityCommands);
             return Ok();
         }
