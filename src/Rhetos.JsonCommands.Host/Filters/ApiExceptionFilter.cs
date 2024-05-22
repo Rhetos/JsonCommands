@@ -31,7 +31,11 @@ namespace Rhetos.JsonCommands.Host.Filters
 {
     /// <summary>
     /// Standard Rhetos JsonCommands API error response format:
-    /// In case of exception, the web response body will be an object with UserMessage and SystemMessage properties.
+    /// In case of an exception, the controller will return a JSON response body with the "Error" property.
+    /// The property will contain text "Message" and optionally the "Metadata" dictionary with additional details on the error.
+    /// For example, on some errors, the metadata will contain the "SystemMessage" text.
+    /// If option <see cref="JsonCommandsOptions.UseLegacyErrorResponse"/> is enabled, the error response will be
+    /// a JSON object with "UserMessage" and "SystemMessage" properties instead.
     /// </summary>
     /// <remarks>
     /// It also writes the exception to the application's log, based on severity:

@@ -17,10 +17,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
-using Rhetos.Dom;
 using Rhetos.Dom.DefaultConcepts;
 using Rhetos.JsonCommands.Host.Filters;
 using Rhetos.JsonCommands.Host.Parsers.Write;
@@ -106,6 +104,8 @@ namespace Rhetos.JsonCommands.Host.Controllers
 
             foreach (var commandDict in commands)
             {
+                if (commandDict.Count > 1)
+                    throw new ClientException($"Each read command in the array can have only one entity specified ({commandDict.Count} found). To read multiple entities, add another element to the commands array.");
                 var command = commandDict.Single(); // Each command is deserialized as a dictionary to simplify the code, but only one key-value pair is allowed.
                 string entityName = command.Key;
                 ReadCommand properties = command.Value;

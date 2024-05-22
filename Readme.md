@@ -10,6 +10,8 @@ See [rhetos.org](http://www.rhetos.org/) for more information on Rhetos.
 1. [Features](#features)
    1. [General rules](#general-rules)
    2. [Writing data](#writing-data)
+   3. [Reading data](#reading-data)
+   4. [Error response](#error-response)
 2. [Installation](#installation)
    1. [Configure JSON format](#configure-json-format)
 3. [How to contribute](#how-to-contribute)
@@ -19,22 +21,9 @@ See [rhetos.org](http://www.rhetos.org/) for more information on Rhetos.
 
 ### General rules
 
-1. Any POST request should contain a header: `Content-Type: application/json; charset=utf-8`
+Any POST request should contain a header: `Content-Type: application/json; charset=utf-8`
 
 Examples in this article will assume that your application's base URI is `https://localhost:5000`.
-
-Response:
-
-* The response status code will indicate the success of the request:
-  * 200 - OK,
-  * 4xx - client error (incorrect data or request format, authentication or authorization error),
-  * 500 - internal server error.
-* In case of an error, the response body will contain more information on the error. It is a JSON object with properties:
-  * UserMessage - a message to be displayed to the user.
-  * SystemMessage - additional error metadata for better client UX
-    (for example, a property that caused an error).
-
-Following are URI templates for the web methods.
 
 ### Writing data
 
@@ -77,6 +66,129 @@ For each entity write block (for example for Bookstore.Book above), internally R
   {  "Bookstore.Book": { "Update": [...] } }
 ]
 ```
+
+In case of a successful write, the command returns an empty response (HTTP 200).
+In case of an error, see the response format in the [Error response](#error-response) section below.
+
+### Reading data
+
+Send a POST or a GET request to `https://localhost:5000/jc/read`.
+
+If using POST (recommended), send the command parameters in the request body.
+If using GET, send the command parameters as a query parameter "q".
+
+The **read command parameters** should have the following format (without the comments).
+
+```js
+[ // Array of read commands
+  {
+    "Bookstore.Book": {
+      "ReadRecords": true, // Read the array of records. The default value is 'true', so this line can be removed.
+      "ReadTotalCount": false, // Read the total records count. The default value is 'false', so this line can be removed.
+      "Filters": [ // See the text below for the information on the Filters parameter.
+        {
+          "Property": "Title",
+          "Operation": "startswith",
+          "Value": "The"
+        },
+        {
+          "Filter": "Bookstore.CommonMisspelling"
+        }
+      ],
+      "Top": 20, // The default value is '0' (read all records).
+      "Skip": 0, // The default value is '0' (no paging), so this line can be removed.
+      "Sort": [ "-Code", "ID" ] // The minus sign ('-') specifies the *descending* sort. 'Sort' is required if Top or Skip is used.
+    }
+  },
+  {
+    "Bookstore.Comment": {
+      "ReadRecords": false,
+      "ReadTotalCount": true
+    }
+  }
+]
+```
+
+The **Filters parameter** in the read command is an array of filters.
+When applying multiple filters in a same request, the intersection of the filtered data is returned (AND).
+The filters in the array can be any of the following types:
+
+1. **Generic** property filter
+   * Format: `{"Property":...,"Operation":..., "Value":...}`
+   * Example: select items where year is greater than 2005: `[{"Property":"Year","Operation":"Greater", "Value":2005}]`
+   * Available operations:
+     * `Equals`, `NotEquals`, `Greater`, `GreaterEqual`, `Less`, `LessEqual`
+     * `In`, `NotIn` -- Parameter Value is a JSON array.
+     * `StartsWith`, `EndsWith`, `Contains`, `NotContains` -- String only.
+     * `DateIn`, `DateNotIn` -- Date or DateTime property only, provided value must be string.
+       Returns whether the property's value is within a given day, month or year.
+       Valid value format is *yyyy-mm-dd*, *yyyy-mm* or *yyyy*.
+2. **Specific filter** without a parameter
+   * Format: `{"Filter":...}` (provide a full name of the filter)
+   * Specific filters refer to concepts such as **ItemFilter**, **ComposableFilterBy** and **FilterBy**,
+     and also other [predefined filters](https://github.com/Rhetos/Rhetos/wiki/Filters-and-other-read-methods#predefined-filters) available in the object model.
+   * Example: get long books from the Bookstore demo by applying
+     [ItemFilter LongBooks](https://github.com/Rhetos/Bookstore/blob/master/src/Bookstore.Service/DslScripts/AdditionalExamples/ExampleFilters.rhe)
+     on Book entity: `[{"Filter":"Bookstore.LongBooks"}]`
+3. **Specific filter** with a parameter
+   * Format: `{"Filter":...,"Value":...}` (value is usually a JSON object)
+   * Example: get books with at least 700 pages from the Bookstore demo by applying
+     [ComposableFilterBy LongBooks3](https://github.com/Rhetos/Bookstore/blob/master/src/Bookstore.Service/DslScripts/AdditionalExamples/ExampleFilters.rhe)
+     on Book entity: `[{"Filter":"Bookstore.LongBooks3","Value":{"MinimumPages":700}}]`
+
+The read command returns the **response** is in the following format (without the comments).
+
+```js
+{
+  "Data": [ // Array of command responses
+    {
+      // Bookstore.Book
+      "Records": [
+        { "Code": "001", "Title": "The Art of Computer Programming" },
+        { "Code": "002", "Title": "Some other book" }
+      ]
+    },
+    {
+      // Bookstore.Comment
+      "TotalCount": 0
+    }
+  ]
+}
+```
+
+In case of an error, see the response format in the [Error response](#error-response) section below.
+
+### Error response
+
+The response status code will indicate the success of the request:
+
+* 200 - OK,
+* 4xx - client error (incorrect data or request format, authentication or authorization error),
+* 500 - internal server error.
+
+In case of an error, the response body will contain more information on the error. It is a JSON object in the following format (without the comments):
+
+```js
+{
+  "Error"
+  {
+    "Message": "... error message for the end user",
+    "Metadata": // Optional additional information on the error (depends on the error type)
+    {
+      // Examples of metadata.
+      "SystemMessage": "... system details on the error for the fronted developer",
+      "DataStructure": "... the entity that caused the error",
+      "Property": "... the property that caused the error",
+      ...
+    }
+  }
+}
+```
+
+If the configuration option "JsonCommandsOptions.UseLegacyErrorResponse" is enabled, the error response will be
+a different JSON object with properties: "UserMessage" (a message that should be displayed to the end user)
+and "SystemMessage" (additional error metadata for better client UX).
+Use the `AddJsonCommands()` method parameter to configure the option.
 
 ## Installation
 

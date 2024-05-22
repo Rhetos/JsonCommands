@@ -45,8 +45,6 @@ namespace TestApp
             {
                 c.CustomSchemaIds(type => type.ToString()); // Allows multiple entities with the same name in different modules.
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "TestApp", Version = "v1" });
-                // Adding Rhetos REST API to Swagger with document name "rhetos".
-                c.SwaggerDoc("rhetos", new OpenApiInfo { Title = "Rhetos REST API", Version = "v1" });
             });
 
             // Configure the JSON object serialization for all properties to start with an uppercase letter, to simplify testing.
@@ -68,7 +66,6 @@ namespace TestApp
                 app.UseSwagger();
                 app.UseSwaggerUI(c =>
                 {
-                    // Add Swagger endpoint for Rhetos REST API.
                     c.SwaggerEndpoint("/swagger/v1/swagger.json", "TestApp v1");
                 });
             }
