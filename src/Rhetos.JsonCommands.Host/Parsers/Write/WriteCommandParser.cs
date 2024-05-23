@@ -99,41 +99,42 @@ namespace Rhetos.JsonCommands.Host.Parsers.Write
 
         private SaveEntityCommandInfo CreateSaveCommand(string entity, List<SaveOperationItems> saveOperations)
         {
-            var command = new SaveEntityCommandInfo { Entity = entity };
-
-            IEntity[] dataToDelete = command.DataToDelete;
-            IEntity[] dataToUpdate = command.DataToUpdate;
-            IEntity[] dataToInsert = command.DataToInsert;
+            IEntity[] dataToDelete = null;
+            IEntity[] dataToUpdate = null;
+            IEntity[] dataToInsert = null;
 
             foreach (var saveOperation in saveOperations)
             {
-                switch (saveOperation.Operation.ToLowerInvariant())
+                switch (saveOperation.Operation.ToUpperInvariant())
                 {
-                    case "delete":
-                        SetData(ref dataToDelete, saveOperation.Items, "Delete");
+                    case "DELETE":
+                        SetData(ref dataToDelete, saveOperation);
                         break;
-                    case "update":
-                        SetData(ref dataToUpdate, saveOperation.Items, "Update");
+                    case "UPDATE":
+                        SetData(ref dataToUpdate, saveOperation);
                         break;
-                    case "insert":
-                        SetData(ref dataToInsert, saveOperation.Items, "Insert");
+                    case "INSERT":
+                        SetData(ref dataToInsert, saveOperation);
                         break;
                     default:
                         throw new ClientException($"Invalid save operation '{saveOperation.Operation}'.");
                 }
             }
 
-            command.DataToDelete = dataToDelete;
-            command.DataToUpdate = dataToUpdate;
-            command.DataToInsert = dataToInsert;
-
-            return command;
+            return new SaveEntityCommandInfo
+            {
+                Entity = entity,
+                DataToDelete = dataToDelete,
+                DataToUpdate = dataToUpdate,
+                DataToInsert = dataToInsert
+            };
         }
 
-        private void SetData(ref IEntity[] commandData, IEntity[] items, string operationName)
+        private void SetData(ref IEntity[] commandData, SaveOperationItems saveOperation)
         {
-            if (commandData != null) throw new ClientException($"There are multiple \"{operationName}\" operations. Use one operation with multiple records.");
-            commandData = items;
+            if (commandData != null)
+                throw new ClientException($"There are multiple '{saveOperation.Operation}' operations. Please combine them into a single operation with multiple records.");
+            commandData = saveOperation.Items;
         }
 
         object ReadToken(JsonTextReader reader, JsonToken jsonToken)

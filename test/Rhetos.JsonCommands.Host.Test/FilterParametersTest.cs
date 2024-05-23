@@ -111,6 +111,9 @@ namespace Rhetos.JsonCommands.Host.Test
         {
             var response = await GetResponse(urlQueryEscaped);
 
+            output.WriteLine(response.Content);
+            output.WriteLine(string.Join(Environment.NewLine, response.LogEntries));
+
             Assert.Equal(
                 "200 {\"Data\":[{\"Records\":[]}]}",
                 $"{response.StatusCode} {response.Content}");

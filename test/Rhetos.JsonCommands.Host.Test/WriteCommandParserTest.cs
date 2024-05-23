@@ -37,7 +37,7 @@ namespace Rhetos.JsonCommands.Host.Test
         [InlineData("[{}]", "There is an empty command.")]
         [InlineData("[{\"e\":{\"insert\":[]}}]", "Incorrect entity name 'e'.")]
         [InlineData("[{\"Common.Role\":{\"op\":[]}}]", "Invalid save operation 'op'.")]
-        [InlineData("[{\"Common.Role\":{\"insert\":[],\"insert\":[]}}]", "There are multiple \"Insert\" operations. Use one operation with multiple records.")]
+        [InlineData("[{\"Common.Role\":{\"insert\":[],\"insert\":[]}}]", "There are multiple 'insert' operations. Please combine them into a single operation with multiple records.")]
         public void ParserTestShouldFail(string json, string clientError, string serverLog = null)
         {
             var factory = new CustomWebApplicationFactory<Startup>();
@@ -101,7 +101,7 @@ namespace Rhetos.JsonCommands.Host.Test
             ]";
 
             var ex = Assert.Throws<ClientException>(() => parser.Parse(json));
-            Assert.StartsWith("There are multiple \"Insert\" operations.", ex.Message);
+            Assert.StartsWith("There are multiple 'Insert' operations.", ex.Message);
         }
     }
 }
