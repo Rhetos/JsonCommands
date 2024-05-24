@@ -17,12 +17,10 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Rhetos.Dom.DefaultConcepts;
 using Rhetos.JsonCommands.Host.Test.Tools;
 using System;
-using TestApp;
 
 namespace Rhetos.JsonCommands.Host.Test
 {
@@ -30,7 +28,7 @@ namespace Rhetos.JsonCommands.Host.Test
     {
         public void Dispose()
         {
-            var factory = new CustomWebApplicationFactory<Startup>();
+            using var factory = new CustomWebApplicationFactory();
             using var scope = factory.Services.CreateScope();
             var repository = scope.ServiceProvider.GetRequiredService<IRhetosComponent<Common.DomRepository>>().Value;
 

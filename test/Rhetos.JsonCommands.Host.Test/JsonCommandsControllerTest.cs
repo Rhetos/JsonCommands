@@ -17,30 +17,29 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Rhetos.Dom.DefaultConcepts;
 using Rhetos.JsonCommands.Host.Test.Tools;
 using System;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading.Tasks;
-using TestApp;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Rhetos.JsonCommands.Host.Test
 {
-    public class JsonCommandsControllerTests : IDisposable, IClassFixture<JsonCommandsTestCleanup>
+    public class JsonCommandsControllerTests : IDisposable, IClassFixture<JsonCommandsTestCleanup>, IClassFixture<CustomWebApplicationFactory>
     {
-        private readonly WebApplicationFactory<Startup> _factory;
+        private readonly CustomWebApplicationFactory _factory;
+        private readonly ITestOutputHelper _output;
 #pragma warning disable IDE0052 // Remove unread private members
         private readonly JsonCommandsTestCleanup _cleanup; // The 'cleanup' instance is used for its constructor and Dispose method for setup and teardown logic. It is injected by xUnit and not directly used in the test methods.
 #pragma warning restore IDE0052 // Remove unread private members
 
-        public JsonCommandsControllerTests(JsonCommandsTestCleanup cleanup)
+        public JsonCommandsControllerTests(JsonCommandsTestCleanup cleanup, ITestOutputHelper output, CustomWebApplicationFactory factory)
         {
-            _factory = new CustomWebApplicationFactory<Startup>();
+            _factory = factory;
+            _output = output;
             _cleanup = cleanup;
         }
 
@@ -56,8 +55,6 @@ namespace Rhetos.JsonCommands.Host.Test
             using (var scope = _factory.Services.CreateScope())
             {
                 var repository = scope.ServiceProvider.GetRequiredService<IRhetosComponent<Common.DomRepository>>().Value;
-
-                var client = SetupClient();
 
                 Guid guid = Guid.NewGuid();
                 Guid guid2 = Guid.NewGuid();
@@ -106,25 +103,29 @@ namespace Rhetos.JsonCommands.Host.Test
 
                 Guid[] guids = new[] { guid, guid2, guid3 };
 
-                var response = await Execute(insertJson, client);
-                Assert.True(response.IsSuccessStatusCode);
-                Assert.Equal(2, repository.Bookstore.Book.Query(guids).Count());
+                {
+                    var response = await TestApiHelper.HttpPostWrite(insertJson, _factory, _output);
+                    Assert.Equal(200, response.StatusCode);
+                    Assert.Equal(2, repository.Bookstore.Book.Query(guids).Count());
+                }
 
-                await Execute(updateJson, client);
-                Assert.True(response.IsSuccessStatusCode);
-                Assert.Equal(2, repository.Bookstore.Book.Query(guids).Count());
+                {
+                    var response = await TestApiHelper.HttpPostWrite(updateJson, _factory, _output);
+                    Assert.Equal(200, response.StatusCode);
+                    Assert.Equal(2, repository.Bookstore.Book.Query(guids).Count());
+                }
 
-                await Execute(deleteJson, client);
-                Assert.True(response.IsSuccessStatusCode);
-                Assert.Equal(0, repository.Bookstore.Book.Query(guids).Count());
+                {
+                    var response = await TestApiHelper.HttpPostWrite(deleteJson, _factory, _output);
+                    Assert.Equal(200, response.StatusCode);
+                    Assert.Equal(0, repository.Bookstore.Book.Query(guids).Count());
+                }
             }
         }
 
         [Fact]
         public async Task FailDoubleInsert()
         {
-            var client = SetupClient();
-
             Guid guid = Guid.NewGuid();
 
             string insertJson = $@"
@@ -139,27 +140,10 @@ namespace Rhetos.JsonCommands.Host.Test
               }}
             ]";
 
-            var response = await Execute(insertJson, client);
-            var responseContent = await response.Content.ReadAsStringAsync();
-            Assert.False(response.IsSuccessStatusCode);
+            var response = await TestApiHelper.HttpPostWrite(insertJson, _factory, _output, builder => builder.UseLegacyErrorResponse());
+            Assert.Equal(400, response.StatusCode);
             Assert.StartsWith("{\"UserMessage\":\"Operation could not be completed because the request sent to the server was not valid or not properly formatted.\""
-                    + ",\"SystemMessage\":\"Inserting a record that already exists in database.", responseContent);
-        }
-
-        private HttpClient SetupClient(bool legacyErrorResponse = true)
-        {
-            var logEntries = new LogEntries();
-            return _factory
-                .WithWebHostBuilder(builder => builder.MonitorLogging(logEntries).UseLegacyErrorResponse(legacyErrorResponse))
-                .CreateClient();
-        }
-
-        private async Task<HttpResponseMessage> Execute(string json, HttpClient client)
-        {
-            var content = new StringContent(json);
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-
-            return await client.PostAsync("jc/write", content);
+                    + ",\"SystemMessage\":\"Inserting a record that already exists in database.", response.Content);
         }
     }
 }

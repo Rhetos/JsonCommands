@@ -17,35 +17,30 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.CodeAnalysis.Operations;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
 using Rhetos.Dom.DefaultConcepts;
 using Rhetos.JsonCommands.Host.Test.Tools;
 using Rhetos.JsonCommands.Host.Utilities;
-using Rhetos.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
-using TestApp;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace Rhetos.JsonCommands.Host.Test
 {
-    public class FilterParametersTest : IDisposable
+    public class FilterParametersTest : IDisposable, IClassFixture<CustomWebApplicationFactory>
     {
-        private readonly WebApplicationFactory<Startup> _factory;
-        private readonly ITestOutputHelper output;
+        private readonly CustomWebApplicationFactory _factory;
+        private readonly ITestOutputHelper _output;
 
-        public FilterParametersTest(ITestOutputHelper output)
+        public FilterParametersTest(ITestOutputHelper output, CustomWebApplicationFactory factory)
         {
-            _factory = new CustomWebApplicationFactory<Startup>();
-            this.output = output;
+            _factory = factory;
+            _output = output;
         }
 
         public void Dispose()
@@ -85,22 +80,14 @@ namespace Rhetos.JsonCommands.Host.Test
 
         private async Task TestSupportedFilterParameters(bool dynamicTypeResolution, string url, bool shouldFail)
         {
-            var logEntries = new LogEntries();
-            var client = _factory
-                .WithWebHostBuilder(builder =>
+            var response = await TestApiHelper.HttpGet(url, _factory, _output,
+                builder =>
                 {
-                    builder.MonitorLogging(logEntries);
                     if (dynamicTypeResolution)
                         builder.SetRhetosDynamicTypeResolution();
-                })
-                .CreateClient();
-            var response = await client.GetAsync(url);
-            string responseContent = await response.Content.ReadAsStringAsync();
+                });
 
-            output.WriteLine(responseContent);
-            output.WriteLine(string.Join(Environment.NewLine, logEntries));
-
-            Assert.Equal(shouldFail ? HttpStatusCode.BadRequest : HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(shouldFail ? (int)HttpStatusCode.BadRequest : (int)HttpStatusCode.OK, response.StatusCode);
         }
 
         const string urlQueryEscaped =    @"jc/read?q=[{""TestHistory.Standard"": {""filters"":[{""Filter"":""System.DateTime"",""Value"":""/Date(1544195644420%2b0100)/""}]}}]";
@@ -109,22 +96,19 @@ namespace Rhetos.JsonCommands.Host.Test
         [Fact]
         public async Task JsonValueTypeAsStringWithCorrectFormat()
         {
-            var response = await GetResponse(urlQueryEscaped);
-
-            output.WriteLine(response.Content);
-            output.WriteLine(string.Join(Environment.NewLine, response.LogEntries));
+            var response = await TestApiHelper.HttpGet(urlQueryEscaped, _factory, _output);
 
             Assert.Equal(
                 "200 {\"Data\":[{\"Records\":[]}]}",
                 $"{response.StatusCode} {response.Content}");
 
-            var response2 = await GetResponse(urlQueryEscaped.Replace(@"""filters""", @"""ReadTotalCount"":true, ""filters"""));
+            var response2 = await TestApiHelper.HttpGet(urlQueryEscaped.Replace(@"""filters""", @"""ReadTotalCount"":true, ""filters"""), _factory, _output);
 
             Assert.Equal(
                 "200 {\"Data\":[{\"Records\":[],\"TotalCount\":0}]}",
                 $"{response.StatusCode} {response2.Content}");
 
-            var response3 = await GetResponse(urlQueryEscaped.Replace(@"""filters""", @"""ReadRecords"":false, ""ReadTotalCount"":true, ""filters"""));
+            var response3 = await TestApiHelper.HttpGet(urlQueryEscaped.Replace(@"""filters""", @"""ReadRecords"":false, ""ReadTotalCount"":true, ""filters"""), _factory, _output);
 
             Assert.Equal(
                 "200 {\"Data\":[{\"TotalCount\":0}]}",
@@ -134,10 +118,7 @@ namespace Rhetos.JsonCommands.Host.Test
         [Fact]
         public async Task JsonValueTypeAsStringWithIncorrectFormat()
         {
-            var response = await GetResponse(urlQueryNotEscaped);
-
-            output.WriteLine(response.Content);
-            output.WriteLine(string.Join(Environment.NewLine, response.LogEntries));
+            var response = await TestApiHelper.HttpGet(urlQueryNotEscaped, _factory, _output, host => host.UseLegacyErrorResponse());
 
             Assert.Equal<object>(
                 "400 {\"UserMessage\":\"Operation could not be completed because the request sent to the server was not valid or not properly formatted.\""
@@ -154,18 +135,6 @@ namespace Rhetos.JsonCommands.Host.Test
             };
             Assert.Equal(1, response.LogEntries.Select(e => e.ToString()).Count(
                 entry => exceptedLogPatterns.All(pattern => entry.Contains(pattern))));
-        }
-
-        private async Task<(int StatusCode, string Content, LogEntries LogEntries)> GetResponse(string url, bool useLegacyErrorResponse = true)
-        {
-            var logEntries = new LogEntries();
-            var client = _factory
-                .WithWebHostBuilder(builder => builder.MonitorLogging(logEntries).UseLegacyErrorResponse(useLegacyErrorResponse))
-                .CreateClient();
-            var response = await client.GetAsync(url);
-            int statusCode = (int)response.StatusCode;
-            string responseContent = await response.Content.ReadAsStringAsync();
-            return (statusCode, responseContent, logEntries);
         }
 
         [Fact]

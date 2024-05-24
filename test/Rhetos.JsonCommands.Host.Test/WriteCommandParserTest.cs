@@ -23,13 +23,19 @@ using Rhetos.JsonCommands.Host.Test.Tools;
 using Rhetos.JsonCommands.Host.Utilities;
 using System;
 using System.Linq;
-using TestApp;
 using Xunit;
 
 namespace Rhetos.JsonCommands.Host.Test
 {
-    public class WriteCommandParserTest
+    public class WriteCommandParserTest : IClassFixture<CustomWebApplicationFactory>
     {
+        private readonly CustomWebApplicationFactory _factory;
+
+        public WriteCommandParserTest(CustomWebApplicationFactory factory)
+        {
+            _factory = factory;
+        }
+
         [Theory]
         [InlineData("", "Empty JSON.")]
         [InlineData("[", "Expected token type StartObject.")]
@@ -40,8 +46,7 @@ namespace Rhetos.JsonCommands.Host.Test
         [InlineData("[{\"Common.Role\":{\"insert\":[],\"insert\":[]}}]", "There are multiple 'insert' operations. Please combine them into a single operation with multiple records.")]
         public void ParserTestShouldFail(string json, string clientError, string serverLog = null)
         {
-            var factory = new CustomWebApplicationFactory<Startup>();
-            using var scope = factory.Services.CreateScope();
+            using var scope = _factory.Services.CreateScope();
             var parser = scope.ServiceProvider.GetRequiredService<WriteCommandsParser>();
 
             var ex = Assert.Throws<ClientException>(() => parser.Parse(json));
@@ -57,8 +62,7 @@ namespace Rhetos.JsonCommands.Host.Test
         [Fact]
         public void CorrectCommand()
         {
-            var factory = new CustomWebApplicationFactory<Startup>();
-            using var scope = factory.Services.CreateScope();
+            using var scope = _factory.Services.CreateScope();
             var parser = scope.ServiceProvider.GetRequiredService<WriteCommandsParser>();
 
             Guid guid = new Guid();
@@ -83,8 +87,7 @@ namespace Rhetos.JsonCommands.Host.Test
         [Fact]
         public void MultipleSameCommands()
         {
-            var factory = new CustomWebApplicationFactory<Startup>();
-            using var scope = factory.Services.CreateScope();
+            using var scope = _factory.Services.CreateScope();
             var parser = scope.ServiceProvider.GetRequiredService<WriteCommandsParser>();
 
             string json = $@"[

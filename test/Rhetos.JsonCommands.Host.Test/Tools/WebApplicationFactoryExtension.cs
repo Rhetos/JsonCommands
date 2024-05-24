@@ -19,23 +19,29 @@
 
 using Autofac;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Rhetos.Dom.DefaultConcepts;
+using TestApp;
 
 namespace Rhetos.JsonCommands.Host
 {
     public static class WebApplicationFactoryExtensions
     {
-        public static IWebHostBuilder MonitorLogging(this IWebHostBuilder builder, LogEntries logEntries, LogLevel minLogLevel = LogLevel.Information)
+        public static LogEntries GetLogEntries(this WebApplicationFactory<Startup> factory)
         {
-            builder.ConfigureLogging(logging =>
-            {
-                logging.Services.AddSingleton(logEntries);
-                logging.Services.AddSingleton(new FakeLoggerOptions { MinLogLevel = minLogLevel });
-            });
+            return factory.Services.GetRequiredService<LogEntries>();
+        }
 
-            return builder;
+        /// <summary>
+        /// The log from <see cref="GetLogEntries"/> will contain more detailed log entries:
+        /// <see cref="LogLevel.Trace"/> and above, instead of default <see cref="LogLevel.Information"/> and above.
+        /// </summary>
+        public static IWebHostBuilder UseTraceLogging(this IWebHostBuilder builder)
+        {
+            return builder.ConfigureLogging(logging
+                => logging.Services.AddSingleton(new FakeLoggerOptions { MinLogLevel = LogLevel.Trace }));
         }
 
         public static IWebHostBuilder UseLegacyErrorResponse(this IWebHostBuilder builder, bool useLegacyErrorResponse = true)
