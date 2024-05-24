@@ -1,5 +1,6 @@
 # JsonCommands release notes
 
-## 1.0.0 (TO BE RELEASED)
+## 1.0.0 (2024-05-24)
 
-* Web API for a batch of write commands: /jc/write
+* Web API for executing multiple **read** or **write** commands in a single batch
+  (in a single database transaction). See [Readme.md](Readme.md) for setup and usage.
