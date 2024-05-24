@@ -29,7 +29,6 @@
     <file src="Readme.md" target="" />
     <file src="ChangeLog.md" target="" />
     <file src="src\Rhetos.JsonCommands.Host\bin\Debug\net5.0\Rhetos.JsonCommands.Host.dll" target="lib\net5.0" />
-    <file src="src\Rhetos.JsonCommands.Host\bin\Debug\net5.0\Rhetos.JsonCommands.Host.pdb" target="lib\net5.0" />
     <file src="src\Rhetos.JsonCommands.Host\bin\Debug\net5.0\Rhetos.JsonCommands.Host.xml" target="lib\net5.0" />
   </files>
 </package>
