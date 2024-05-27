@@ -5,19 +5,64 @@ JsonCommands is a web API plugin package for [Rhetos development platform](https
 It provides **a JSON web service** for all entities and other readable data structures,
 that allows executing multiple read or write commands in one web request.
 
-See [rhetos.org](http://www.rhetos.org/) for more information on Rhetos.
+JsonCommands can be used simultaneously with the older REST API ([Rhetos.RestGenerator](https://github.com/Rhetos/RestGenerator)) with no conflicts,
+but the new web API provides the following advantages:
 
-1. [Features](#features)
+* Better performance for a larger number of smaller operations (network latency is only waited on once).
+* Data consistency due to the atomicity of saving multiple entities at once (one request uses one db transaction,
+  either all records are written or none).
+* Reduces the need for coding custom Actions and Functions in DSL scripts for saving multiple records.
+
+The [Rhetos.ComplexEntity](https://www.nuget.org/packages/Rhetos.ComplexEntity) is another plugin
+that allows reading or writing multiple entities in one web request, but it is intended
+for more specific cases (for details and extensions).
+JsonCommands can be simpler to use in other cases such as batch write of a simple entity
+or reading multiple unrelated entities at once.
+
+Contents:
+
+1. [Installation](#installation)
+2. [Usage and features](#usage-and-features)
    1. [General rules](#general-rules)
    2. [Writing data](#writing-data)
    3. [Reading data](#reading-data)
    4. [Error response](#error-response)
-2. [Installation](#installation)
-   1. [Configure JSON format](#configure-json-format)
 3. [How to contribute](#how-to-contribute)
    1. [Building and testing the source code](#building-and-testing-the-source-code)
+4. [Troubleshooting](#troubleshooting)
 
-## Features
+## Installation
+
+Installing this package to a Rhetos web application:
+
+1. Add "Rhetos.JsonCommands" NuGet package, available at the [NuGet.org](https://www.nuget.org/) on-line gallery.
+
+   * Supports Rhetos version 5.4.0 and newer.
+
+2. Extend Rhetos services configuration (at `services.AddRhetosHost`) with the JsonCommands API:
+
+   ```cs
+   .AddJsonCommands();
+   ```
+
+3. Configure JSON format, depending on your intended client applications:
+
+   * For **compatibility with [Rhetos.FloydExtensions](https://www.nuget.org/packages/Rhetos.FloydExtensions)**,
+     you can configure the JSON object serialization for all properties to start with an uppercase letter:
+
+    ```cs
+    // If not using Newtonsoft.Json:
+    builder.Services.AddControllers()
+      .AddJsonOptions(options => options.JsonSerializerOptions.PropertyNamingPolicy = null);
+
+    // If using Newtonsoft.Json:
+    builder.Services.AddControllers()
+      .AddNewtonsoftJson(o => o.UseMemberCasing());
+    ```
+
+4. If needed, configure the *legacy* error response format (see [Error response](#error-response) section below).
+
+## Usage and features
 
 ### General rules
 
@@ -190,34 +235,6 @@ a different JSON object with properties: "UserMessage" (a message that should be
 and "SystemMessage" (additional error metadata for better client UX).
 Use the `AddJsonCommands()` method parameter to configure the option.
 
-## Installation
-
-Installing this package to a Rhetos web application:
-
-1. Add "Rhetos.JsonCommands" NuGet package, available at the [NuGet.org](https://www.nuget.org/) on-line gallery.
-2. Extend Rhetos services configuration (at `services.AddRhetosHost`) with the JsonCommands API:
-   ```cs
-   .AddJsonCommands();
-   ```
-
-### Configure JSON format
-
-Depending on your intended client applications, you can use standard ASP.NET Core features
-to configure the JSON response formatting in Program.cs or Startup.cs.
-
-For compatibility with [Rhetos.FloydExtensions](https://www.nuget.org/packages/Rhetos.FloydExtensions),
-you can configure the JSON object serialization for all properties to start with an uppercase letter:
-
-```cs
-// If not using Newtonsoft.Json:
-builder.Services.AddControllers()
-  .AddJsonOptions(options => options.JsonSerializerOptions.PropertyNamingPolicy = null);
-
-// If using Newtonsoft.Json:
-builder.Services.AddControllers()
-  .AddNewtonsoftJson(o => o.UseMemberCasing());
-```
-
 ## How to contribute
 
 Contributions are very welcome. The easiest way is to fork this repo, and then
@@ -234,3 +251,7 @@ For more info see [How to Contribute](https://github.com/Rhetos/Rhetos/wiki/How-
   a settings file `test\TestApp\ConnectionString.local.json`
   with the database connection string (configuration key "ConnectionStrings:RhetosConnectionString").
 * The build output is a NuGet package in the "Install" subfolder.
+
+## Troubleshooting
+
+* If the installation is not completed (`.AddJsonCommands()` is missing), a web request to /jc might result with `System.InvalidOperationException: No service for type 'Rhetos.JsonCommands.Host.Filters.ApiCommitOnSuccessFilter' has been registered.`. To fix this, follow the instruction in the Installation section above.
