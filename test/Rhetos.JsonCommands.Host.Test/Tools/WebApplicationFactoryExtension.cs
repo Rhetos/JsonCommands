@@ -1,4 +1,4 @@
-﻿/*
+/*
     Copyright (C) 2014 Omega software d.o.o.
 
     This file is part of Rhetos.
@@ -17,12 +17,10 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-using Autofac;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Rhetos.Dom.DefaultConcepts;
 using TestApp;
 
 namespace Rhetos.JsonCommands.Host
@@ -49,20 +47,6 @@ namespace Rhetos.JsonCommands.Host
             return builder.ConfigureServices(
                 services => services.PostConfigure<JsonCommandsOptions>(
                     options => options.UseLegacyErrorResponse = useLegacyErrorResponse));
-        }
-
-        /// <summary>
-        /// See <see cref="CommonConceptsRuntimeOptions.DynamicTypeResolution"/>.
-        /// </summary>
-        public static IWebHostBuilder SetRhetosDynamicTypeResolution(this IWebHostBuilder webHostBuilder)
-        {
-            webHostBuilder.ConfigureServices(
-                services => services.AddRhetosHost(
-                    (serviceProvider, rhetosHostBuilder) => rhetosHostBuilder.ConfigureContainer(
-                        containerBuilder => containerBuilder.RegisterInstance(
-                            new CommonConceptsRuntimeOptions { DynamicTypeResolution = true }))));
-
-            return webHostBuilder;
         }
     }
 }

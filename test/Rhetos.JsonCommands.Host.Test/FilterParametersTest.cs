@@ -49,6 +49,9 @@ namespace Rhetos.JsonCommands.Host.Test
             GC.SuppressFinalize(this);
         }
 
+        /// <param name="dynamicOnly">
+        /// Used for DynamicTypeResolution in Rhetos 5. This feature is no longer supported, so the filters are expected to fail where this boolean is set.
+        /// </param>
         [Theory]
         // Generic filter:
         [InlineData(false, "Common.Claim", "[{\"Property\":\"ID\",\"Operation\":\"in\",\"Value\":[\"4a5c23ff-6525-4e17-b848-185e082a6974\",\"0f6618b1-074a-482f-be74-c6e394641209\"]}]")]
@@ -74,19 +77,12 @@ namespace Rhetos.JsonCommands.Host.Test
                 ? $@"jc/read?q=[{{""{entity}"": {{}}}}]"
                 : $@"jc/read?q=[{{""{entity}"": {{""filters"":{filters}}}}}]";
 
-            await TestSupportedFilterParameters(false, url, shouldFail: dynamicOnly);
-            await TestSupportedFilterParameters(true, url, shouldFail: false);
+            await TestSupportedFilterParameters(url, shouldFail: dynamicOnly);
         }
 
-        private async Task TestSupportedFilterParameters(bool dynamicTypeResolution, string url, bool shouldFail)
+        private async Task TestSupportedFilterParameters(string url, bool shouldFail)
         {
-            var response = await TestApiHelper.HttpGet(url, _factory, _output,
-                builder =>
-                {
-                    if (dynamicTypeResolution)
-                        builder.SetRhetosDynamicTypeResolution();
-                });
-
+            var response = await TestApiHelper.HttpGet(url, _factory, _output);
             Assert.Equal(shouldFail ? (int)HttpStatusCode.BadRequest : (int)HttpStatusCode.OK, response.StatusCode);
         }
 

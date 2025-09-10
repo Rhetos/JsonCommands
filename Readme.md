@@ -37,8 +37,6 @@ Installing this package to a Rhetos web application:
 
 1. Add "Rhetos.JsonCommands" NuGet package, available at the [NuGet.org](https://www.nuget.org/) on-line gallery.
 
-   * Supports Rhetos version 5.4.0 and newer.
-
 2. Extend Rhetos services configuration (at `services.AddRhetosHost`) with the JsonCommands API:
 
    ```cs
