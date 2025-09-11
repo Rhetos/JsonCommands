@@ -2,7 +2,7 @@
 
 ## 6.0.0 (2025-09-11)
 
-* Update to Rhetos 6 and .NET 8.
+* Update to .NET 8 and Rhetos 6.
 
 ## 1.0.0 (2024-05-27)
 

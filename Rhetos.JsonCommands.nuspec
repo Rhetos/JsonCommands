@@ -11,6 +11,7 @@
       JsonCommands is a plugin package for Rhetos development platform.
       It provides a generic JSON web service that allows executing multiple read or write commands in one web request.
     </description>
+    <readme>docs\Readme.md</readme>
     <copyright>Copyright Omega software 2024</copyright>
     <tags>Rhetos plugin</tags>
     <dependencies>
@@ -26,7 +27,7 @@
     </frameworkReferences>
   </metadata>
   <files>
-    <file src="Readme.md" target="" />
+    <file src="Readme.md" target="docs" />
     <file src="ChangeLog.md" target="" />
     <file src="src\Rhetos.JsonCommands.Host\bin\Debug\net8.0\Rhetos.JsonCommands.Host.dll" target="lib\net8.0" />
     <file src="src\Rhetos.JsonCommands.Host\bin\Debug\net8.0\Rhetos.JsonCommands.Host.xml" target="lib\net8.0" />
